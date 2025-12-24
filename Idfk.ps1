@@ -19,3 +19,5 @@ $line = "$time | $user | $os | IP: $ip"
 
 # Write (append, not overwrite)
 Add-Content -Path $out -Value $line
+
+Read-Host "Press Enter to close"
