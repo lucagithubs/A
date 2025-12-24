@@ -128,6 +128,3 @@ $doc = [Environment]::GetFolderPath("MyDocuments")
 $out = Join-Path $doc "system_info.txt"
 $message | Out-File $out -Encoding UTF8
 Write-Host "Backup saved to: $out" -ForegroundColor Green
-
-Write-Host "`n================================" -ForegroundColor Cyan
-Read-Host "Press Enter to close"
