@@ -69,13 +69,3 @@ try {
     Write-Host "`nFull Error Details:" -ForegroundColor Red
     Write-Host $_ -ForegroundColor Red
 }
-
-# Save backup locally
-Write-Host "`nSaving backup locally..." -ForegroundColor Yellow
-$doc = [Environment]::GetFolderPath("MyDocuments")
-$out = Join-Path $doc "ip.txt"
-Add-Content -Path $out -Value "$time | $user | $computer | $os | IP: $ip"
-Write-Host "Backup saved to: $out" -ForegroundColor Green
-
-Write-Host "`n================================" -ForegroundColor Cyan
-Read-Host "Press Enter to close"
