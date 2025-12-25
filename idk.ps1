@@ -1,6 +1,6 @@
 # Chrome Password Extractor - Using Python for Decryption
 
-Write-Host "=== Chrome Password Extractor ===" -ForegroundColor Cyan
+Write-Host "=== Chrome Password Extractor 1 ===" -ForegroundColor Cyan
 Write-Host ""
 
 # Create Python decryption script
@@ -94,7 +94,7 @@ try {
     $passwords = $output | ConvertFrom-Json
     
     Write-Host "========================================" -ForegroundColor Green
-    Write-Host "Successfully extracted $($passwords.Count) passwords!" -ForegroundColor Green
+    Write-Host "Successfully extracted 1 $($passwords.Count) passwords!" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
     
