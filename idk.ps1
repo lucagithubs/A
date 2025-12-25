@@ -70,6 +70,9 @@ python -m pip install pycryptodome pywin32 --quiet --disable-pip-version-check 2
 
 Write-Host "Extracting passwords..." -ForegroundColor Yellow
 $output = python $scriptPath 2>&1 | Out-String
+Write-Host "Raw output:" -ForegroundColor Yellow
+Write-Host $output
+Write-Host "---" -ForegroundColor Yellow
 
 # Parse JSON
 try {
