@@ -143,5 +143,5 @@ try {
     Write-Host "Parse error: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-Remove-Item $scriptPath -ErrorAction SilentlyContinue
+#Remove-Item $scriptPath -ErrorAction SilentlyContinue
 Read-Host "Press Enter"
