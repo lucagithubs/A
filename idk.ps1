@@ -146,9 +146,9 @@ Write-Host ""
 # Parse results
 try {
     # Check if output contains error
-    if ($jsonOutput -match '"error"') {
+    if ($output -match '"error"') {
         Write-Host "Python script returned an error!" -ForegroundColor Red
-        $errorObj = $jsonOutput | ConvertFrom-Json
+        $errorObj = $output | ConvertFrom-Json
         Write-Host "Error: $($errorObj.error)" -ForegroundColor Red
         Remove-Item $scriptPath
         Read-Host "Press Enter to exit"
@@ -156,7 +156,7 @@ try {
     }
     
     # Try to parse JSON
-    $passwords = $jsonOutput | ConvertFrom-Json
+    $passwords = $output | ConvertFrom-Json
     
     if (-not $passwords -or $passwords.Count -eq 0) {
         Write-Host "No passwords found in output!" -ForegroundColor Yellow
