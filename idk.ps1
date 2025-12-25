@@ -28,14 +28,23 @@ try:
     cursor = conn.cursor()
     cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
     
+    all_rows = cursor.fetchall()
+    sys.stderr.write(f"Total rows fetched: {len(all_rows)}\n")
+    
     results = []
-    for url, username, enc_pass in cursor.fetchall():
+    for url, username, enc_pass in all_rows:
+        sys.stderr.write(f"Processing: {url}\n")
+        
         if not enc_pass:
+            sys.stderr.write(f"  Skipping - no password\n")
             continue
+        
+        sys.stderr.write(f"  Has password, length: {len(enc_pass)}\n")
         
         try:
             # Detect encryption version
             if enc_pass[:3] in (b'v10', b'v11', b'v20'):
+                sys.stderr.write(f"  Using AES-GCM\n")
                 # AES-GCM
                 nonce = enc_pass[3:15]
                 ciphertext = enc_pass[15:-16]
@@ -43,14 +52,17 @@ try:
                 cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
                 # Just decrypt without verifying tag (v20 has issues with verification)
                 password = cipher.decrypt(ciphertext).decode('utf-8', errors='ignore')
+                sys.stderr.write(f"  Decrypted successfully\n")
             else:
+                sys.stderr.write(f"  Using DPAPI\n")
                 # DPAPI
                 password = win32crypt.CryptUnprotectData(enc_pass, None, None, None, 0)[1].decode('utf-8', errors='ignore')
+                sys.stderr.write(f"  Decrypted successfully\n")
             
             results.append({"url": url, "username": username, "password": password})
+            sys.stderr.write(f"  Added to results\n")
         except Exception as e:
-            import sys
-            sys.stderr.write(f"Failed: {url} - {str(e)}\n")
+            sys.stderr.write(f"  ERROR: {str(e)}\n")
     
     cursor.close()
     conn.close()
