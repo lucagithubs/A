@@ -116,10 +116,12 @@ try:
     except:
         pass
 
-    # Output as JSON
+    # Output ONLY JSON to stdout (not stderr)
     print(json.dumps(results))
     
 except Exception as e:
+    # Errors go to stderr
+    sys.stderr.write(f"FATAL ERROR: {str(e)}\n")
     print(json.dumps({"error": str(e)}))
     sys.exit(1)
 '@
@@ -144,24 +146,17 @@ Write-Host ""
 # Parse results
 try {
     # Check if output contains error
-    if ($output -match '"error"') {
+    if ($jsonOutput -match '"error"') {
         Write-Host "Python script returned an error!" -ForegroundColor Red
-        $errorObj = $output | ConvertFrom-Json
+        $errorObj = $jsonOutput | ConvertFrom-Json
         Write-Host "Error: $($errorObj.error)" -ForegroundColor Red
         Remove-Item $scriptPath
         Read-Host "Press Enter to exit"
         exit
     }
     
-    if ($output -match "Traceback") {
-        Write-Host "Python exception occurred!" -ForegroundColor Red
-        Remove-Item $scriptPath
-        Read-Host "Press Enter to exit"
-        exit
-    }
-    
     # Try to parse JSON
-    $passwords = $output.Trim() | ConvertFrom-Json
+    $passwords = $jsonOutput | ConvertFrom-Json
     
     if (-not $passwords -or $passwords.Count -eq 0) {
         Write-Host "No passwords found in output!" -ForegroundColor Yellow
