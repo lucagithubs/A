@@ -50,23 +50,28 @@ function Show-ProgressBar {
         [int]$Total = 100,
         [string]$Color = "Green"
     )
-    
-    for ($i = 0; $i -le $Total; $i += (Get-Random -Minimum 3 -Maximum 8)) {
+
+    $step = 1
+    for ($i = 0; $i -le $Total; $i += $step) {
+
         if ($i -gt $Total) { $i = $Total }
-        
+
         $percent = $i
         $completed = [math]::Floor($percent / 5)
         $remaining = 20 - $completed
-        
+
         $bar = "█" * $completed + "░" * $remaining
-        
+
         Write-Host -NoNewline "`r[$bar] $percent% - $Activity" -ForegroundColor $Color
-        
-        # Random beep during progress
-        if ((Get-Random -Minimum 1 -Maximum 100) -lt 10) {
-            Play-Beep -frequency (Get-Random -Minimum 400 -Maximum 1000) -duration 50
+
+        # Event-based sound (consistent)
+        if ($percent -eq 0) {
+            Play-Beep -frequency 700 -duration 150
         }
-        
+        elseif ($percent -eq 100) {
+            Play-Beep -frequency 1200 -duration 300
+        }
+
         Start-Sleep -Milliseconds $script:config.AnimationSpeed
     }
     Write-Host ""
@@ -121,7 +126,6 @@ function Show-DataStream {
 }
 
 function Clear-WithTransition {
-    # Smooth screen wipe
     for ($i = 0; $i -lt 3; $i++) {
         Clear-Host
         Start-Sleep -Milliseconds 50
@@ -129,8 +133,19 @@ function Clear-WithTransition {
 }
 
 # ==================== UTILITY FUNCTIONS ====================
-function Get-RandomIP {
-    return "$(Get-Random -Minimum 1 -Maximum 255).$(Get-Random -Minimum 0 -Maximum 255).$(Get-Random -Minimum 0 -Maximum 255).$(Get-Random -Minimum 1 -Maximum 255)"
+function Get-RealIP {
+    try {
+        $response = Invoke-WebRequest -Uri "https://www.whatsmyip.org" -UseBasicParsing -TimeoutSec 5
+        $match = $response.Content | Select-String -Pattern '\b\d{1,3}(\.\d{1,3}){3}\b' | Select-Object -First 1
+        if ($match) {
+            return $match.Matches.Value
+        } else {
+            return "UNKNOWN"
+        }
+    }
+    catch {
+        return "UNKNOWN"
+    }
 }
 
 function Get-RandomMAC {
