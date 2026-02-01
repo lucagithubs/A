@@ -751,7 +751,6 @@ function FBI-Hack-Start {
         Write-Host "`r     │      ║ ░░░░░░░║         │" -ForegroundColor DarkGray -NoNewline
         Start-Sleep -Milliseconds 300
     }
-    Write-Host ""
 
     
     Write-Host ""
