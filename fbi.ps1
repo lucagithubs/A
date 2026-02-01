@@ -1,40 +1,3 @@
-# FBI Hack Simulator - ULTIMATE EDITION
-# Windows PowerShell Version with ALL enhancements
-
-# ==================== CONFIGURATION ====================
-$script:config = @{
-    AnimationSpeed = 50      # milliseconds (adjustable)
-    SoundEnabled = $true     # Enable/disable beeps
-    MatrixSpeed = 30         # Matrix effect speed
-    GlitchChance = 0.05      # 5% chance of glitch
-    DetectionChance = 0.15   # 15% chance of detection
-}
-
-# ==================== SOUND EFFECTS ====================
-function Play-Beep {
-    param([int]$frequency = 800, [int]$duration = 200)
-    if ($script:config.SoundEnabled) {
-        [console]::beep($frequency, $duration)
-    }
-}
-
-function Play-CriticalBeep {
-    if ($script:config.SoundEnabled) {
-        [console]::beep(1000, 100)
-        Start-Sleep -Milliseconds 50
-        [console]::beep(1200, 100)
-        Start-Sleep -Milliseconds 50
-        [console]::beep(1400, 150)
-    }
-}
-
-function Play-SuccessBeep {
-    if ($script:config.SoundEnabled) {
-        [console]::beep(600, 100)
-        [console]::beep(800, 150)
-    }
-}
-
 function Play-ErrorBeep {
     if ($script:config.SoundEnabled) {
         [console]::beep(200, 300)
@@ -50,28 +13,23 @@ function Show-ProgressBar {
         [int]$Total = 100,
         [string]$Color = "Green"
     )
-
-    $step = 1
-    for ($i = 0; $i -le $Total; $i += $step) {
-
+    
+    for ($i = 0; $i -le $Total; $i += (Get-Random -Minimum 3 -Maximum 8)) {
         if ($i -gt $Total) { $i = $Total }
-
+        
         $percent = $i
         $completed = [math]::Floor($percent / 5)
         $remaining = 20 - $completed
-
+        
         $bar = "█" * $completed + "░" * $remaining
-
+        
         Write-Host -NoNewline "`r[$bar] $percent% - $Activity" -ForegroundColor $Color
-
-        # Event-based sound (consistent)
-        if ($percent -eq 0) {
-            Play-Beep -frequency 700 -duration 150
+        
+        # Random beep during progress
+        if ((Get-Random -Minimum 1 -Maximum 100) -lt 10) {
+            Play-Beep -frequency (Get-Random -Minimum 400 -Maximum 1000) -duration 50
         }
-        elseif ($percent -eq 100) {
-            Play-Beep -frequency 1200 -duration 300
-        }
-
+        
         Start-Sleep -Milliseconds $script:config.AnimationSpeed
     }
     Write-Host ""
@@ -126,6 +84,7 @@ function Show-DataStream {
 }
 
 function Clear-WithTransition {
+    # Smooth screen wipe
     for ($i = 0; $i -lt 3; $i++) {
         Clear-Host
         Start-Sleep -Milliseconds 50
@@ -133,19 +92,8 @@ function Clear-WithTransition {
 }
 
 # ==================== UTILITY FUNCTIONS ====================
-function Get-RealIP {
-    try {
-        $response = Invoke-WebRequest -Uri "https://www.whatsmyip.org" -UseBasicParsing -TimeoutSec 5
-        $match = $response.Content | Select-String -Pattern '\b\d{1,3}(\.\d{1,3}){3}\b' | Select-Object -First 1
-        if ($match) {
-            return $match.Matches.Value
-        } else {
-            return "UNKNOWN"
-        }
-    }
-    catch {
-        return "UNKNOWN"
-    }
+function Get-RandomIP {
+    return "$(Get-Random -Minimum 1 -Maximum 255).$(Get-Random -Minimum 0 -Maximum 255).$(Get-Random -Minimum 0 -Maximum 255).$(Get-Random -Minimum 1 -Maximum 255)"
 }
 
 function Get-RandomMAC {
@@ -745,13 +693,12 @@ function FBI-Hack-Start {
     
     # Animated scanning
     for ($i = 0; $i -lt 3; $i++) {
-        Write-Host "`r     │      ║░███░███░║         │" -ForegroundColor Green -NoNewline
+        Write-Host "     │      ║░███░███░║         │" -ForegroundColor Green
         Play-Beep -frequency 1000 -duration 50
         Start-Sleep -Milliseconds 300
         Write-Host "`r     │      ║ ░░░░░░░║         │" -ForegroundColor DarkGray -NoNewline
         Start-Sleep -Milliseconds 300
     }
-
     
     Write-Host ""
     Write-Host "     │      ║░███░███░║         │" -ForegroundColor Green
@@ -786,16 +733,11 @@ function FBI-Hack-Start {
     Write-Host "     │   SCANNING RETINA...    │" -ForegroundColor Yellow
     Write-Host "     └─────────────────────────┘"
     
-    # Retinal scan animation (in-place redraw)
+    # Retinal scan animation
     for ($i = 0; $i -lt 5; $i++) {
-        Write-Host "`r     │      ▓░░░██░░░▓         │" -ForegroundColor Cyan -NoNewline
         Play-Beep -frequency (1000 + ($i * 100)) -duration 50
-        Start-Sleep -Milliseconds 150
-        Write-Host "`r     │      ▓░░░░░░░▓         │" -ForegroundColor DarkGray -NoNewline
-        Start-Sleep -Milliseconds 150
+        Start-Sleep -Milliseconds 200
     }
-    Write-Host ""
-
     
     Start-Sleep 1
     Write-Host ""
