@@ -745,12 +745,14 @@ function FBI-Hack-Start {
     
     # Animated scanning
     for ($i = 0; $i -lt 3; $i++) {
-        Write-Host "     │      ║░███░███░║         │" -ForegroundColor Green
+        Write-Host "`r     │      ║░███░███░║         │" -ForegroundColor Green -NoNewline
         Play-Beep -frequency 1000 -duration 50
         Start-Sleep -Milliseconds 300
         Write-Host "`r     │      ║ ░░░░░░░║         │" -ForegroundColor DarkGray -NoNewline
         Start-Sleep -Milliseconds 300
     }
+    Write-Host ""
+
     
     Write-Host ""
     Write-Host "     │      ║░███░███░║         │" -ForegroundColor Green
@@ -785,11 +787,16 @@ function FBI-Hack-Start {
     Write-Host "     │   SCANNING RETINA...    │" -ForegroundColor Yellow
     Write-Host "     └─────────────────────────┘"
     
-    # Retinal scan animation
+    # Retinal scan animation (in-place redraw)
     for ($i = 0; $i -lt 5; $i++) {
+        Write-Host "`r     │      ▓░░░██░░░▓         │" -ForegroundColor Cyan -NoNewline
         Play-Beep -frequency (1000 + ($i * 100)) -duration 50
-        Start-Sleep -Milliseconds 200
+        Start-Sleep -Milliseconds 150
+        Write-Host "`r     │      ▓░░░░░░░▓         │" -ForegroundColor DarkGray -NoNewline
+        Start-Sleep -Milliseconds 150
     }
+    Write-Host ""
+
     
     Start-Sleep 1
     Write-Host ""
