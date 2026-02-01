@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul
 color 0a
 mode con cols=120 lines=40
 setlocal enabledelayedexpansion
