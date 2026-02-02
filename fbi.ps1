@@ -419,7 +419,6 @@ function Start-Ransomware {
     for ($i = 1; $i -le 20; $i++) {
         $ext = $fileTypes | Get-Random
         $filename = "document_$(Get-Random -Minimum 100 -Maximum 999)$ext"
-        $percent = [math]::Floor(($i / 20) * 100)
         
         Write-Host "  [ENCRYPTED] $filename → $filename.locked" -ForegroundColor Yellow
         
@@ -695,117 +694,6 @@ function Start-PhishingCampaign {
     Write-Host ""
     Read-Host "Press Enter to continue"
 }
-
-# ==================== SETTINGS ====================
-function Show-Settings {
-    Clear-WithTransition
-    
-    Write-Host ""
-    Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "  ║                    SETTINGS & CONFIGURATION                ║" -ForegroundColor Cyan
-    Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
-    Write-Host ""
-    
-    Write-Host "Current Settings:" -ForegroundColor Yellow
-    Write-Host "  [1] Animation Speed: $($script:config.AnimationSpeed)ms" -ForegroundColor White
-    Write-Host "  [2] Sound Effects: $($script:config.SoundEnabled)" -ForegroundColor White
-    Write-Host "  [3] Matrix Speed: $($script:config.MatrixSpeed)ms" -ForegroundColor White
-    Write-Host "  [4] Glitch Chance: $($script:config.GlitchChance * 100)%" -ForegroundColor White
-    Write-Host "  [5] Detection Chance: $($script:config.DetectionChance * 100)%" -ForegroundColor White
-    Write-Host "  [6] Return to Menu" -ForegroundColor White
-    Write-Host ""
-    
-    $choice = Read-Host "Select setting to modify (1-6)"
-    
-    switch ($choice) {
-        "1" {
-            $speed = Read-Host "Enter animation speed in ms (10-200)"
-            $script:config.AnimationSpeed = [int]$speed
-            Write-Host "Animation speed updated!" -ForegroundColor Green
-            Start-Sleep 1
-            Show-Settings
-        }
-        "2" {
-            $script:config.SoundEnabled = -not $script:config.SoundEnabled
-            Write-Host "Sound effects: $($script:config.SoundEnabled)" -ForegroundColor Green
-            Start-Sleep 1
-            Show-Settings
-        }
-        "3" {
-            $speed = Read-Host "Enter matrix speed in ms (10-100)"
-            $script:config.MatrixSpeed = [int]$speed
-            Write-Host "Matrix speed updated!" -ForegroundColor Green
-            Start-Sleep 1
-            Show-Settings
-        }
-        "4" {
-            $chance = Read-Host "Enter glitch chance 0-100 (%)"
-            $script:config.GlitchChance = [double]$chance / 100
-            Write-Host "Glitch chance updated!" -ForegroundColor Green
-            Start-Sleep 1
-            Show-Settings
-        }
-        "5" {
-            $chance = Read-Host "Enter detection chance 0-100 (%)"
-            $script:config.DetectionChance = [double]$chance / 100
-            Write-Host "Detection chance updated!" -ForegroundColor Green
-            Start-Sleep 1
-            Show-Settings
-        }
-        "6" { return }
-    }
-}
-
-# ==================== MAIN LOOP ====================
-$host.ui.RawUI.WindowTitle = "FBI TERMINAL"
-$host.ui.RawUI.BackgroundColor = "Black"
-$host.ui.RawUI.ForegroundColor = "Green"
-Clear-Host
-
-do {
-    Show-Menu
-    $choice = Read-Host "root@terminal:~#"
-    
-    try {
-        switch ($choice) {
-            "1"  { FBI-Hack-Start }
-            "2"  { Delete-System32 }
-            "3"  { Network-Attack }
-            "4"  { Crypto-Mine }
-            "5"  { Password-Crack }
-            "6"  { Track-Suspects }
-            "7"  { Agent-Profiles }
-            "8"  { Satellite-Uplink }
-            "9"  { Download-Files }
-            "10" { Start-SQLInjection }
-            "11" { Start-DDoSAttack }
-            "12" { Start-Ransomware }
-            "13" { Start-Keylogger }
-            "14" { Start-WiFiCracker }
-            "15" { Start-PhishingCampaign }
-            "16" { Show-SystemInfo }
-            "17" { Show-Settings }
-            "18" { 
-                Clear-WithTransition
-                Write-Host "Exiting..." -ForegroundColor Red
-                Play-ErrorBeep
-                Start-Sleep 1
-                exit 
-            }
-            default {
-                Write-Host "Invalid option!" -ForegroundColor Red
-                Play-ErrorBeep
-                Start-Sleep 1
-            }
-        }
-    }
-    catch {
-        Write-Host "Error occurred: $_" -ForegroundColor Red
-        Play-ErrorBeep
-        Start-Sleep 2
-    }
-    
-} while ($true)
 
 # ==================== ENHANCED ORIGINAL FUNCTIONS ====================
 
@@ -1844,3 +1732,113 @@ function Password-Crack {
     Write-Host ""
     Read-Host "Press Enter to continue"
 }
+
+# ==================== SETTINGS ====================
+function Show-Settings {
+    Clear-WithTransition
+    
+    Write-Host ""
+    Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+    Write-Host "  ║                    SETTINGS & CONFIGURATION                ║" -ForegroundColor Cyan
+    Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+    Write-Host ""
+    
+    Write-Host "Current Settings:" -ForegroundColor Yellow
+    Write-Host "  [1] Animation Speed: $($script:config.AnimationSpeed)ms" -ForegroundColor White
+    Write-Host "  [2] Sound Effects: $($script:config.SoundEnabled)" -ForegroundColor White
+    Write-Host "  [3] Matrix Speed: $($script:config.MatrixSpeed)ms" -ForegroundColor White
+    Write-Host "  [4] Glitch Chance: $($script:config.GlitchChance * 100)%" -ForegroundColor White
+    Write-Host "  [5] Detection Chance: $($script:config.DetectionChance * 100)%" -ForegroundColor White
+    Write-Host "  [6] Return to Menu" -ForegroundColor White
+    Write-Host ""
+    
+    $choice = Read-Host "Select setting to modify (1-6)"
+    
+    switch ($choice) {
+        "1" {
+            $speed = Read-Host "Enter animation speed in ms (10-200)"
+            $script:config.AnimationSpeed = [int]$speed
+            Write-Host "Animation speed updated!" -ForegroundColor Green
+            Start-Sleep 1
+            Show-Settings
+        }
+        "2" {
+            $script:config.SoundEnabled = -not $script:config.SoundEnabled
+            Write-Host "Sound effects: $($script:config.SoundEnabled)" -ForegroundColor Green
+            Start-Sleep 1
+            Show-Settings
+        }
+        "3" {
+            $speed = Read-Host "Enter matrix speed in ms (10-100)"
+            $script:config.MatrixSpeed = [int]$speed
+            Write-Host "Matrix speed updated!" -ForegroundColor Green
+            Start-Sleep 1
+            Show-Settings
+        }
+        "4" {
+            $chance = Read-Host "Enter glitch chance 0-100 (%)"
+            $script:config.GlitchChance = [double]$chance / 100
+            Write-Host "Glitch chance updated!" -ForegroundColor Green
+            Start-Sleep 1
+            Show-Settings
+        }
+        "5" {
+            $chance = Read-Host "Enter detection chance 0-100 (%)"
+            $script:config.DetectionChance = [double]$chance / 100
+            Write-Host "Detection chance updated!" -ForegroundColor Green
+            Start-Sleep 1
+            Show-Settings
+        }
+        "6" { return }
+    }
+}
+
+# ==================== MAIN LOOP ====================
+$host.ui.RawUI.WindowTitle = "FBI TERMINAL"
+$host.ui.RawUI.BackgroundColor = "Black"
+$host.ui.RawUI.ForegroundColor = "Green"
+Clear-Host
+
+do {
+    Show-Menu
+    $choice = Read-Host "root@terminal:~#"
+    
+    try {
+        switch ($choice) {
+            "1"  { FBI-Hack-Start }
+            "2"  { Delete-System32 }
+            "3"  { Network-Attack }
+            "4"  { Crypto-Mine }
+            "5"  { Password-Crack }
+            "6"  { Track-Suspects }
+            "7"  { Agent-Profiles }
+            "8"  { Satellite-Uplink }
+            "9"  { Download-Files }
+            "10" { Start-SQLInjection }
+            "11" { Start-DDoSAttack }
+            "12" { Start-Ransomware }
+            "13" { Start-Keylogger }
+            "14" { Start-WiFiCracker }
+            "15" { Start-PhishingCampaign }
+            "16" { Show-SystemInfo }
+            "17" { Show-Settings }
+            "18" {
+            Clear-WithTransition
+            Write-Host "Exiting..." -ForegroundColor Red
+            Play-ErrorBeep
+            Start-Sleep 1
+            exit
+            }
+            default {
+            Write-Host "Invalid option!" -ForegroundColor Red
+            Play-ErrorBeep
+            Start-Sleep 1
+            }
+            }
+            }
+            catch {
+            Write-Host "Error occurred: $_" -ForegroundColor Red
+            Play-ErrorBeep
+            Start-Sleep 2
+            }
+            } while ($true)
