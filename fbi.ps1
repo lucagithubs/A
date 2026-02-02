@@ -1,13 +1,13 @@
-# FBI Hack Simulator - ULTIMATE EDITION
-# Windows PowerShell Version with ALL enhancements
+# FBI Hack Simulator - ULTIMATE EDITION v2.0
+# Windows PowerShell Version with FIXED features
 
 # ==================== CONFIGURATION ====================
 $script:config = @{
     AnimationSpeed = 50      # milliseconds (adjustable)
     SoundEnabled = $true     # Enable/disable beeps
     MatrixSpeed = 30         # Matrix effect speed
-    GlitchChance = 0.05      # 5% chance of glitch
-    DetectionChance = 0.15   # 15% chance of detection
+    GlitchChance = 0.05      # 5% chance of glitch (hidden from settings)
+    DetectionChance = 0.15   # 15% chance of detection (hidden from settings)
 }
 
 # ==================== SOUND EFFECTS ====================
@@ -20,26 +20,57 @@ function Play-Beep {
 
 function Play-CriticalBeep {
     if ($script:config.SoundEnabled) {
-        [console]::beep(1000, 100)
-        Start-Sleep -Milliseconds 50
-        [console]::beep(1200, 100)
-        Start-Sleep -Milliseconds 50
-        [console]::beep(1400, 150)
+        [console]::beep(1000, 150)
+        Start-Sleep -Milliseconds 100
+        [console]::beep(1200, 150)
+        Start-Sleep -Milliseconds 100
+        [console]::beep(1400, 200)
     }
 }
 
 function Play-SuccessBeep {
     if ($script:config.SoundEnabled) {
-        [console]::beep(600, 100)
-        [console]::beep(800, 150)
+        [console]::beep(600, 150)
+        Start-Sleep -Milliseconds 50
+        [console]::beep(800, 200)
     }
 }
 
 function Play-ErrorBeep {
     if ($script:config.SoundEnabled) {
+        [console]::beep(300, 200)
+        Start-Sleep -Milliseconds 100
         [console]::beep(200, 300)
+    }
+}
+
+function Play-ProgressBeep {
+    param([int]$percent)
+    if ($script:config.SoundEnabled) {
+        # Progressive beep based on percentage
+        $freq = 400 + ($percent * 8)  # Increases from 400Hz to 1200Hz
+        [console]::beep($freq, 50)
+    }
+}
+
+function Play-ScanBeep {
+    if ($script:config.SoundEnabled) {
+        # Scanning sound effect
+        [console]::beep(800, 100)
         Start-Sleep -Milliseconds 50
-        [console]::beep(150, 400)
+        [console]::beep(1000, 100)
+    }
+}
+
+function Play-WarningBeep {
+    if ($script:config.SoundEnabled) {
+        # Urgent warning sound
+        for ($i = 0; $i -lt 3; $i++) {
+            [console]::beep(1500, 100)
+            Start-Sleep -Milliseconds 100
+            [console]::beep(1200, 100)
+            Start-Sleep -Milliseconds 100
+        }
     }
 }
 
@@ -51,9 +82,8 @@ function Show-ProgressBar {
         [string]$Color = "Green"
     )
     
-    for ($i = 0; $i -le $Total; $i += (Get-Random -Minimum 3 -Maximum 8)) {
-        if ($i -gt $Total) { $i = $Total }
-        
+    # FIXED: Always reaches 100%
+    for ($i = 0; $i -le $Total; $i++) {
         $percent = $i
         $completed = [math]::Floor($percent / 5)
         $remaining = 20 - $completed
@@ -62,12 +92,17 @@ function Show-ProgressBar {
         
         Write-Host -NoNewline "`r[$bar] $percent% - $Activity" -ForegroundColor $Color
         
-        # Random beep during progress
-        if ((Get-Random -Minimum 1 -Maximum 100) -lt 10) {
-            Play-Beep -frequency (Get-Random -Minimum 400 -Maximum 1000) -duration 50
+        # Play progressive beep
+        if ($i % 10 -eq 0) {
+            Play-ProgressBeep -percent $percent
         }
         
-        Start-Sleep -Milliseconds $script:config.AnimationSpeed
+        # Variable speed - slower at start and end, faster in middle
+        if ($i -lt 10 -or $i -gt 90) {
+            Start-Sleep -Milliseconds ($script:config.AnimationSpeed * 2)
+        } else {
+            Start-Sleep -Milliseconds $script:config.AnimationSpeed
+        }
     }
     Write-Host ""
 }
@@ -93,6 +128,7 @@ function Show-GlitchEffect {
     for ($i = 0; $i -lt 5; $i++) {
         $host.UI.RawUI.ForegroundColor = @('Red','Green','Blue','Yellow','Magenta','Cyan') | Get-Random
         Write-Host "█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░" -NoNewline
+        Play-Beep -frequency (Get-Random -Minimum 800 -Maximum 1500) -duration 50
         Start-Sleep -Milliseconds 50
         Write-Host "`r                                                                      " -NoNewline
         Start-Sleep -Milliseconds 50
@@ -116,6 +152,12 @@ function Show-DataStream {
         Write-Host " | " -NoNewline
         $data = Get-Random -Minimum 100 -Maximum 999
         Write-Host "$data KB/s" -ForegroundColor Yellow
+        
+        # Data stream beeps
+        if ((Get-Random -Minimum 1 -Maximum 10) -eq 1) {
+            Play-Beep -frequency (Get-Random -Minimum 600 -Maximum 1000) -duration 30
+        }
+        
         Start-Sleep -Milliseconds 100
     }
 }
@@ -131,6 +173,15 @@ function Clear-WithTransition {
 # ==================== UTILITY FUNCTIONS ====================
 function Get-RandomIP {
     return "$(Get-Random -Minimum 1 -Maximum 255).$(Get-Random -Minimum 0 -Maximum 255).$(Get-Random -Minimum 0 -Maximum 255).$(Get-Random -Minimum 1 -Maximum 255)"
+}
+
+function Get-RealIP {
+    try {
+        $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 3).Content
+        return $ip
+    } catch {
+        return Get-RandomIP
+    }
 }
 
 function Get-RandomMAC {
@@ -156,7 +207,7 @@ function Test-Detection {
 
 function Show-DetectionAlert {
     Clear-WithTransition
-    Play-ErrorBeep
+    Play-WarningBeep
     
     $host.UI.RawUI.ForegroundColor = "Red"
     $host.UI.RawUI.BackgroundColor = "Black"
@@ -176,7 +227,15 @@ function Show-DetectionAlert {
     
     Write-Host "[SYSTEM] Tracing connection source..." -ForegroundColor Yellow
     Start-Sleep 1
-    Write-Host "[SYSTEM] IP Address: $(Get-RandomIP) - LOGGED" -ForegroundColor Yellow
+    
+    # Get real IP address
+    Write-Host "[SYSTEM] Acquiring IP address..." -ForegroundColor Yellow
+    $realIP = Get-RealIP
+    
+    Write-Host "[SYSTEM] IP Address: $realIP - LOGGED" -ForegroundColor Red
+    Play-ErrorBeep
+    Start-Sleep 1
+    Write-Host "[SYSTEM] Geolocation: ACQUIRED" -ForegroundColor Yellow
     Start-Sleep 1
     Write-Host "[SYSTEM] Deploying honeypot..." -ForegroundColor Yellow
     Start-Sleep 1
@@ -187,11 +246,12 @@ function Show-DetectionAlert {
     
     Write-Host ""
     Write-Host "[CONNECTION TERMINATED]" -ForegroundColor Red
+    Write-Host "[YOUR IP HAS BEEN LOGGED: $realIP]" -ForegroundColor Red
     Write-Host ""
     
     Play-ErrorBeep
     
-    Start-Sleep 2
+    Start-Sleep 3
     Read-Host "Press Enter to return to menu"
 }
 
@@ -221,6 +281,7 @@ function Show-SystemInfo {
     foreach ($key in $fakeData.Keys) {
         Write-Host "  $key`: " -NoNewline -ForegroundColor Green
         Write-Host $fakeData[$key] -ForegroundColor White
+        Play-ScanBeep
         Start-Sleep -Milliseconds 200
     }
     
@@ -263,7 +324,7 @@ function Show-Menu {
 
 function Start-SQLInjection {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 800 -duration 100
     
     Write-Host ""
     Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
@@ -285,6 +346,7 @@ function Start-SQLInjection {
     
     foreach ($target in $targets) {
         Write-Host "[SCAN] Testing: $target" -ForegroundColor Green
+        Play-ScanBeep
         Start-Sleep -Milliseconds 300
     }
     
@@ -315,6 +377,7 @@ function Start-SQLInjection {
         $email = "user$i@target.com"
         $hash = -join ((1..32) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
         Write-Host "  [$i] $email | Hash: $hash" -ForegroundColor White
+        Play-Beep -frequency 900 -duration 40
         Start-Sleep -Milliseconds 200
     }
     
@@ -325,7 +388,7 @@ function Start-SQLInjection {
 
 function Start-DDoSAttack {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 700 -duration 100
     
     Write-Host ""
     Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Red
@@ -350,7 +413,7 @@ function Start-DDoSAttack {
     
     $bots = Get-Random -Minimum 5000 -Maximum 15000
     Write-Host "[BOTNET] $bots bots online and ready" -ForegroundColor Green
-    Play-Beep
+    Play-SuccessBeep
     
     Write-Host ""
     Write-Host "[ATTACK] Initiating DDoS attack on $targetIP" -ForegroundColor Red
@@ -363,9 +426,8 @@ function Start-DDoSAttack {
         
         Write-Host "[BOT $botIP] Sending $packets packets/sec | $mbps Mbps" -ForegroundColor Cyan
         
-        if ($i % 5 -eq 0) {
-            Play-Beep -frequency (Get-Random -Minimum 600 -Maximum 1200) -duration 50
-        }
+        # Attack sound - increasing frequency
+        Play-Beep -frequency (600 + ($i * 30)) -duration 40
         
         Start-Sleep -Milliseconds 200
     }
@@ -385,7 +447,7 @@ function Start-DDoSAttack {
 
 function Start-Ransomware {
     Clear-WithTransition
-    Play-CriticalBeep
+    Play-WarningBeep
     
     Write-Host ""
     Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Red
@@ -422,9 +484,8 @@ function Start-Ransomware {
         
         Write-Host "  [ENCRYPTED] $filename → $filename.locked" -ForegroundColor Yellow
         
-        if ($i % 3 -eq 0) {
-            Play-Beep -frequency 1000 -duration 50
-        }
+        # Encryption sound
+        Play-Beep -frequency 1100 -duration 50
         
         Start-Sleep -Milliseconds 150
     }
@@ -457,7 +518,7 @@ function Start-Ransomware {
     Write-Host "  ╚════════════════════════════════════════════════════════════╝"
     Write-Host ""
     
-    Play-CriticalBeep
+    Play-WarningBeep
     Start-Sleep 3
     
     $host.UI.RawUI.BackgroundColor = "Black"
@@ -472,7 +533,7 @@ function Start-Ransomware {
 
 function Start-Keylogger {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 1000 -duration 100
     
     Write-Host ""
     Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Magenta
@@ -517,7 +578,7 @@ function Start-Keylogger {
     
     foreach ($log in $fakeKeystrokes) {
         Write-Host "  [LOG] $log" -ForegroundColor White
-        Play-Beep -frequency 800 -duration 50
+        Play-Beep -frequency 850 -duration 60
         Start-Sleep -Milliseconds 500
     }
     
@@ -529,7 +590,7 @@ function Start-Keylogger {
 
 function Start-WiFiCracker {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 900 -duration 100
     
     Write-Host ""
     Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
@@ -555,6 +616,7 @@ function Start-WiFiCracker {
     for ($i = 0; $i -lt $networks.Count; $i++) {
         $net = $networks[$i]
         Write-Host "  [$($i+1)] SSID: $($net.SSID) | Signal: $($net.Signal) | Security: $($net.Encryption)" -ForegroundColor White
+        Play-ScanBeep
         Start-Sleep -Milliseconds 300
     }
     
@@ -592,7 +654,7 @@ function Start-WiFiCracker {
     
     foreach ($attempt in $attempts) {
         Write-Host "  [TRYING] $attempt..." -ForegroundColor DarkGray
-        Play-Beep -frequency (Get-Random -Minimum 400 -Maximum 800) -duration 30
+        Play-Beep -frequency (500 + (Get-Random -Maximum 300)) -duration 40
         Start-Sleep -Milliseconds 300
     }
     
@@ -615,7 +677,7 @@ function Start-WiFiCracker {
 
 function Start-PhishingCampaign {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 950 -duration 100
     
     Write-Host ""
     Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Yellow
@@ -685,6 +747,7 @@ function Start-PhishingCampaign {
         $user = "employee$((Get-Random -Minimum 100 -Maximum 999))"
         $pass = -join ((1..12) | ForEach-Object { [char](Get-Random -Minimum 33 -Maximum 126) })
         Write-Host "  [$i] $user@fbi.gov : $pass" -ForegroundColor White
+        Play-Beep -frequency 900 -duration 50
         Start-Sleep -Milliseconds 300
     }
     
@@ -694,12 +757,11 @@ function Start-PhishingCampaign {
     Write-Host ""
     Read-Host "Press Enter to continue"
 }
-
 # ==================== ENHANCED ORIGINAL FUNCTIONS ====================
 
 function FBI-Hack-Start {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 800 -duration 150
     
     Write-Host ""
     Write-Host "  ███████╗██████╗ ██╗    ██████╗  █████╗ ████████╗ █████╗ ██████╗  █████╗ ███████╗███████╗" -ForegroundColor Green
@@ -770,7 +832,7 @@ function FBI-Hack-Start {
     Write-Host "     │   SCANNING RETINA...    │" -ForegroundColor Yellow
     Write-Host "     └─────────────────────────┘"
     
-    # Retinal scan animation
+    # Retinal scan animation with progressive beeps
     for ($i = 0; $i -lt 5; $i++) {
         Play-Beep -frequency (1000 + ($i * 100)) -duration 50
         Start-Sleep -Milliseconds 200
@@ -859,7 +921,7 @@ function FBI-Hack-Start {
         Write-Host "[*] Killing $system..." -ForegroundColor Yellow -NoNewline
         Start-Sleep -Milliseconds 300
         Write-Host " DONE" -ForegroundColor Green
-        Play-Beep -frequency 600 -duration 50
+        Play-Beep -frequency 700 -duration 60
     }
     
     Start-Sleep 1
@@ -913,6 +975,7 @@ function FBI-Hack-Start {
     
     foreach ($cmd in $commands) {
         Write-Host "  > $cmd" -ForegroundColor DarkGray
+        Play-Beep -frequency 950 -duration 50
         Start-Sleep -Milliseconds 500
     }
     
@@ -986,7 +1049,7 @@ function FBI-Menu {
 
 function Track-Suspects {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 850 -duration 100
     
     if (Test-Detection) { return }
     
@@ -1038,7 +1101,7 @@ function Track-Suspects {
         Write-Host (" " * 68) -NoNewline
         Write-Host "│"
         
-        Play-Beep -frequency 800 -duration 50
+        Play-Beep -frequency 850 -duration 60
         Start-Sleep 1
     }
     
@@ -1052,7 +1115,7 @@ function Track-Suspects {
 
 function Criminal-Records {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 800 -duration 100
     
     if (Test-Detection) { return }
     
@@ -1072,7 +1135,7 @@ function Criminal-Records {
         $formatted_ssn = $ssn.Substring(0,3) + "-" + $ssn.Substring(3,2) + "-" + $ssn.Substring(5,4)
         Write-Host "[DB] Record #$id | Name: $name | SSN: $formatted_ssn | Status: EXTRACTED" -ForegroundColor Green
         
-        Play-Beep -frequency (600 + ($i * 20)) -duration 30
+        Play-Beep -frequency (650 + ($i * 15)) -duration 40
         Start-Sleep -Milliseconds 150
     }
     
@@ -1085,7 +1148,7 @@ function Criminal-Records {
 
 function Active-Investigations {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 900 -duration 100
     
     if (Test-Detection) { return }
     
@@ -1110,7 +1173,7 @@ function Active-Investigations {
     
     foreach ($case in $cases) {
         Write-Host $case -ForegroundColor Yellow
-        Play-Beep -frequency 700 -duration 40
+        Play-Beep -frequency 750 -duration 50
         Start-Sleep -Milliseconds 300
     }
     
@@ -1123,7 +1186,7 @@ function Active-Investigations {
 
 function Classified-Documents {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 950 -duration 100
     
     if (Test-Detection) { return }
     
@@ -1143,7 +1206,7 @@ function Classified-Documents {
     foreach ($doc in $documents) {
         Write-Host "[DOWNLOADING] $($doc.Name) ($($doc.Size)) " -NoNewline -ForegroundColor Cyan
         Show-ProgressBar -Activity "" -Total 100 -Color Green
-        Play-Beep -frequency 900 -duration 50
+        Play-Beep -frequency 950 -duration 60
     }
     
     Write-Host ""
@@ -1155,7 +1218,7 @@ function Classified-Documents {
 
 function Surveillance-Footage {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 1000 -duration 100
     
     if (Test-Detection) { return }
     
@@ -1174,7 +1237,7 @@ function Surveillance-Footage {
     
     foreach ($cam in $cameras) {
         Write-Host $cam -ForegroundColor Green
-        Play-Beep -frequency 1000 -duration 30
+        Play-Beep -frequency 1050 -duration 40
         Start-Sleep -Milliseconds 200
     }
     
@@ -1191,7 +1254,7 @@ function Surveillance-Footage {
     foreach ($tap in $wiretaps) {
         Write-Host "$tap - DOWNLOADING..." -ForegroundColor Yellow
         Show-ProgressBar -Activity "Decrypting audio" -Total 100 -Color Cyan
-        Play-Beep -frequency 600 -duration 100
+        Play-Beep -frequency 650 -duration 80
     }
     
     Write-Host ""
@@ -1203,14 +1266,14 @@ function Surveillance-Footage {
 
 function Witness-Protection {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 700 -duration 100
     
     if (Test-Detection) { return }
     
     Write-Slow "[DATABASE] Accessing Witness Protection Program..."
     Write-Host ""
     Write-Host "[⚠️  WARNING] This database contains HIGHLY SENSITIVE information" -ForegroundColor Red
-    Play-CriticalBeep
+    Play-WarningBeep
     Start-Sleep 1
     
     Show-ProgressBar -Activity "Decrypting witness records" -Color Red
@@ -1228,7 +1291,7 @@ function Witness-Protection {
     
     foreach ($witness in $witnesses) {
         Write-Host $witness -ForegroundColor DarkGray
-        Play-Beep -frequency 500 -duration 50
+        Play-Beep -frequency 550 -duration 50
         Start-Sleep -Milliseconds 300
     }
     
@@ -1241,7 +1304,7 @@ function Witness-Protection {
 
 function Agent-Profiles {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 1100 -duration 100
     
     if (Test-Detection) { return }
     
@@ -1295,7 +1358,7 @@ function Agent-Profiles {
         Write-Host "  Cases: $($agent.Cases)" -ForegroundColor White
         Write-Host "════════════════════════════════════════════════════════════════════"
         Write-Host ""
-        Play-Beep -frequency 1100 -duration 100
+        Play-Beep -frequency 1150 -duration 80
         Start-Sleep 1
     }
     
@@ -1307,7 +1370,7 @@ function Agent-Profiles {
 
 function Satellite-Uplink {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 1200 -duration 100
     
     if (Test-Detection) { return }
     
@@ -1318,7 +1381,7 @@ function Satellite-Uplink {
     Show-ProgressBar -Activity "Establishing uplink" -Color Cyan
     
     Write-Host "[*] Authentication: ACCEPTED" -ForegroundColor Green
-    Play-Beep -frequency 1200 -duration 100
+    Play-Beep -frequency 1250 -duration 100
     Write-Host "[*] Uplink established" -ForegroundColor Green
     Start-Sleep 1
     Write-Host "[✓] SATELLITE CONNECTION ACTIVE" -ForegroundColor Red
@@ -1349,7 +1412,7 @@ function Satellite-Uplink {
     
     foreach ($coord in $coordinates) {
         Write-Host "[IMAGE] Target: $coord - Resolution: 0.3m" -ForegroundColor Cyan
-        Play-Beep -frequency 900 -duration 50
+        Play-Beep -frequency 950 -duration 60
         Start-Sleep -Milliseconds 400
     }
     
@@ -1367,7 +1430,7 @@ function Satellite-Uplink {
 
 function Webcam-Access {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 1000 -duration 100
     
     if (Test-Detection) { return }
     
@@ -1375,7 +1438,7 @@ function Webcam-Access {
     Write-Host ""
     Start-Sleep 1
     Write-Host "[⚠️  WARNING] Unauthorized access to private devices" -ForegroundColor Red
-    Play-CriticalBeep
+    Play-WarningBeep
     Start-Sleep 1
     Write-Host ""
     
@@ -1390,7 +1453,7 @@ function Webcam-Access {
     
     foreach ($cam in $webcams) {
         Write-Host $cam -ForegroundColor Green
-        Play-Beep -frequency 1000 -duration 40
+        Play-Beep -frequency 1050 -duration 50
         Start-Sleep -Milliseconds 300
     }
     
@@ -1417,7 +1480,7 @@ function Webcam-Access {
 
 function Download-Files {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 900 -duration 100
     
     if (Test-Detection) { return }
     
@@ -1463,7 +1526,7 @@ function Download-Files {
 
 function Evidence-Locker {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 800 -duration 100
     
     if (Test-Detection) { return }
     
@@ -1471,7 +1534,7 @@ function Evidence-Locker {
     Write-Host ""
     Start-Sleep 1
     Write-Host "[⚠️  RESTRICTED] Chain of Custody Required" -ForegroundColor Red
-    Play-CriticalBeep
+    Play-WarningBeep
     Start-Sleep 1
     
     Show-ProgressBar -Activity "Authenticating access" -Color Red
@@ -1524,7 +1587,7 @@ function Evidence-Locker {
         
         foreach ($evidence in $case.Evidence) {
             Write-Host "  $evidence" -ForegroundColor White
-            Play-Beep -frequency 700 -duration 40
+            Play-Beep -frequency 750 -duration 50
             Start-Sleep -Milliseconds 300
         }
         
@@ -1539,7 +1602,7 @@ function Evidence-Locker {
 
 function Delete-System32 {
     Clear-WithTransition
-    Play-CriticalBeep
+    Play-WarningBeep
     
     $host.ui.RawUI.ForegroundColor = "Red"
     
@@ -1556,7 +1619,7 @@ function Delete-System32 {
     Write-Host "  ╚════════════════════════════════════════════════════════════════════════════╝"
     Write-Host ""
     
-    Play-CriticalBeep
+    Play-WarningBeep
     Read-Host "Press Enter to continue"
     
     if (Test-Detection) { return }
@@ -1571,14 +1634,14 @@ function Delete-System32 {
     Write-Host "[*] Taking ownership of protected system files..." -ForegroundColor Yellow
     Show-ProgressBar -Activity "Acquiring permissions" -Color Yellow
     Write-Host "[✓] Ownership acquired - 4,287 files" -ForegroundColor Green
-    Play-Beep
+    Play-SuccessBeep
     Write-Host ""
     
     Write-Slow "C:\Windows\System32> icacls * /grant administrators:F /t"
     Write-Host "[*] Granting full permissions..." -ForegroundColor Yellow
     Start-Sleep 1
     Write-Host "[✓] Permissions granted" -ForegroundColor Green
-    Play-Beep
+    Play-SuccessBeep
     Write-Host ""
     Write-Host ""
     
@@ -1589,14 +1652,14 @@ function Delete-System32 {
     Write-Host "                          INITIATING DELETION SEQUENCE"
     Write-Host "════════════════════════════════════════════════════════════════════════════════"
     Write-Host ""
-    Play-CriticalBeep
+    Play-WarningBeep
     Start-Sleep 1
     
     $files = @("kernel32.dll", "ntoskrnl.exe", "hal.dll", "ntdll.dll", "user32.dll", "gdi32.dll", "advapi32.dll", "shell32.dll", "ole32.dll", "oleaut32.dll", "msvcrt.dll", "wininet.dll", "comctl32.dll", "comdlg32.dll", "winspool.drv", "ws2_32.dll", "rpcrt4.dll", "imm32.dll", "imagehlp.dll", "psapi.dll", "version.dll", "winmm.dll", "netapi32.dll", "setupapi.dll", "shlwapi.dll", "crypt32.dll", "secur32.dll", "wintrust.dll", "userenv.dll", "uxtheme.dll", "dwmapi.dll", "dbghelp.dll", "winload.exe", "winresume.exe", "ntfs.sys", "disk.sys", "acpi.sys")
     
     foreach ($file in $files) {
         Write-Host "[DELETING] C:\Windows\System32\$file" -ForegroundColor Yellow
-        Play-Beep -frequency (Get-Random -Minimum 400 -Maximum 1200) -duration 50
+        Play-Beep -frequency (Get-Random -Minimum 400 -Maximum 1400) -duration 60
         Start-Sleep -Milliseconds 50
     }
     
@@ -1610,7 +1673,7 @@ function Delete-System32 {
     $host.ui.RawUI.ForegroundColor = "White"
     Clear-Host
     
-    Play-CriticalBeep
+    Play-WarningBeep
     
     Write-Host ""
     Write-Host ""
@@ -1635,7 +1698,7 @@ function Delete-System32 {
     Write-Host ""
     Write-Host ""
     
-    Play-CriticalBeep
+    Play-WarningBeep
     Start-Sleep 3
     
     $host.ui.RawUI.BackgroundColor = "Black"
@@ -1645,7 +1708,7 @@ function Delete-System32 {
 
 function Network-Attack {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 850 -duration 100
     
     if (Test-Detection) { return }
     
@@ -1656,7 +1719,7 @@ function Network-Attack {
         $ip = Get-RandomIP
         $port = Get-Random -Maximum 65535
         Write-Host "[CONN] $ip`:$port | STATUS: ESTABLISHED | ENCRYPTION: AES-256" -ForegroundColor Cyan
-        Play-Beep -frequency (Get-Random -Minimum 600 -Maximum 1200) -duration 30
+        Play-Beep -frequency (700 + ($i * 20)) -duration 40
         Start-Sleep -Milliseconds 50
     }
     
@@ -1684,14 +1747,14 @@ function Crypto-Mine {
     Write-Slow "[*] Connecting to mining pool: btc-pool-elite.onion"
     Show-ProgressBar -Activity "Establishing Tor connection" -Color Yellow
     Write-Slow "[✓] Connected - Starting GPU threads"
-    Play-Beep
+    Play-SuccessBeep
     Write-Host ""
     
     for ($i = 1; $i -le 20; $i++) {
         $hash = Get-Random -Maximum 999999999
         $speed = (Get-Random -Maximum 500) + 100
         Write-Host "[MINING] Block #$i | Hash: 0x$hash | Speed: $speed MH/s" -ForegroundColor Yellow
-        Play-Beep -frequency (800 + ($i * 10)) -duration 30
+        Play-Beep -frequency (850 + ($i * 10)) -duration 40
         Start-Sleep -Milliseconds 100
     }
     
@@ -1705,7 +1768,7 @@ function Crypto-Mine {
 
 function Password-Crack {
     Clear-WithTransition
-    Play-Beep
+    Play-Beep -frequency 900 -duration 100
     
     if (Test-Detection) { return }
     
@@ -1722,7 +1785,7 @@ function Password-Crack {
     
     foreach ($attempt in $attempts) {
         Write-Host "[TRYING] $attempt..." -ForegroundColor DarkGray
-        Play-Beep -frequency (Get-Random -Minimum 400 -Maximum 800) -duration 50
+        Play-Beep -frequency (Get-Random -Minimum 500 -Maximum 900) -duration 50
         Start-Sleep -Milliseconds 200
     }
     
@@ -1733,7 +1796,7 @@ function Password-Crack {
     Read-Host "Press Enter to continue"
 }
 
-# ==================== SETTINGS ====================
+# ==================== SETTINGS (HIDDEN OPTIONS REMOVED) ====================
 function Show-Settings {
     Clear-WithTransition
     
@@ -1747,24 +1810,24 @@ function Show-Settings {
     Write-Host "  [1] Animation Speed: $($script:config.AnimationSpeed)ms" -ForegroundColor White
     Write-Host "  [2] Sound Effects: $($script:config.SoundEnabled)" -ForegroundColor White
     Write-Host "  [3] Matrix Speed: $($script:config.MatrixSpeed)ms" -ForegroundColor White
-    Write-Host "  [4] Glitch Chance: $($script:config.GlitchChance * 100)%" -ForegroundColor White
-    Write-Host "  [5] Detection Chance: $($script:config.DetectionChance * 100)%" -ForegroundColor White
-    Write-Host "  [6] Return to Menu" -ForegroundColor White
+    Write-Host "  [4] Return to Menu" -ForegroundColor White
     Write-Host ""
     
-    $choice = Read-Host "Select setting to modify (1-6)"
+    $choice = Read-Host "Select setting to modify (1-4)"
     
     switch ($choice) {
         "1" {
             $speed = Read-Host "Enter animation speed in ms (10-200)"
             $script:config.AnimationSpeed = [int]$speed
             Write-Host "Animation speed updated!" -ForegroundColor Green
+            Play-SuccessBeep
             Start-Sleep 1
             Show-Settings
         }
         "2" {
             $script:config.SoundEnabled = -not $script:config.SoundEnabled
             Write-Host "Sound effects: $($script:config.SoundEnabled)" -ForegroundColor Green
+            if ($script:config.SoundEnabled) { Play-SuccessBeep }
             Start-Sleep 1
             Show-Settings
         }
@@ -1772,24 +1835,11 @@ function Show-Settings {
             $speed = Read-Host "Enter matrix speed in ms (10-100)"
             $script:config.MatrixSpeed = [int]$speed
             Write-Host "Matrix speed updated!" -ForegroundColor Green
+            Play-SuccessBeep
             Start-Sleep 1
             Show-Settings
         }
-        "4" {
-            $chance = Read-Host "Enter glitch chance 0-100 (%)"
-            $script:config.GlitchChance = [double]$chance / 100
-            Write-Host "Glitch chance updated!" -ForegroundColor Green
-            Start-Sleep 1
-            Show-Settings
-        }
-        "5" {
-            $chance = Read-Host "Enter detection chance 0-100 (%)"
-            $script:config.DetectionChance = [double]$chance / 100
-            Write-Host "Detection chance updated!" -ForegroundColor Green
-            Start-Sleep 1
-            Show-Settings
-        }
-        "6" { return }
+        "4" { return }
     }
 }
 
@@ -1822,23 +1872,24 @@ do {
             "15" { Start-PhishingCampaign }
             "16" { Show-SystemInfo }
             "17" { Show-Settings }
-            "18" {
-            Clear-WithTransition
-            Write-Host "Exiting..." -ForegroundColor Red
-            Play-ErrorBeep
-            Start-Sleep 1
-            exit
+            "18" { 
+                Clear-WithTransition
+                Write-Host "Exiting..." -ForegroundColor Red
+                Play-ErrorBeep
+                Start-Sleep 1
+                exit 
             }
             default {
-            Write-Host "Invalid option!" -ForegroundColor Red
-            Play-ErrorBeep
-            Start-Sleep 1
+                Write-Host "Invalid option!" -ForegroundColor Red
+                Play-ErrorBeep
+                Start-Sleep 1
             }
-            }
-            }
-            catch {
-            Write-Host "Error occurred: $_" -ForegroundColor Red
-            Play-ErrorBeep
-            Start-Sleep 2
-            }
-            } while ($true)
+        }
+    }
+    catch {
+        Write-Host "Error occurred: $_" -ForegroundColor Red
+        Play-ErrorBeep
+        Start-Sleep 2
+    }
+    
+} while ($true)
