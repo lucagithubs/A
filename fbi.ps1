@@ -1881,7 +1881,7 @@ function Password-Crack {
     Write-Host ""
     Read-Host "Press Enter to continue"
 }
-
+# ==================== Settings ====================
 function Show-Settings {
     Clear-WithTransition
 
