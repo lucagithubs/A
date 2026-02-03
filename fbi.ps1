@@ -8,6 +8,8 @@ $script:config = @{
     MatrixSpeed = 30         # Matrix effect speed
     GlitchChance = 0.05      # 5% chance of glitch (hidden from settings)
     DetectionChance = 0.15   # 15% chance of detection (hidden from settings)
+    SecretUnlocked = $false  # Hidden turbo mode setting
+    TurboMode = $false       # Turbo mode status
 }
 
 # ==================== SOUND EFFECTS ====================
