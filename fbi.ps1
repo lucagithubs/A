@@ -1,3 +1,762 @@
+# FBI Hack Simulator - ULTIMATE EDITION v2.0
+# Windows PowerShell Version with FIXED features
+
+# ==================== CONFIGURATION ====================
+$script:config = @{
+    AnimationSpeed = 50      # milliseconds (adjustable)
+    SoundEnabled = $true     # Enable/disable beeps
+    MatrixSpeed = 30         # Matrix effect speed
+    GlitchChance = 0.05      # 5% chance of glitch (hidden from settings)
+    DetectionChance = 0.15   # 15% chance of detection (hidden from settings)
+}
+
+# ==================== SOUND EFFECTS ====================
+function Play-Beep {
+    param([int]$frequency = 800, [int]$duration = 200)
+    if ($script:config.SoundEnabled) {
+        [console]::beep($frequency, $duration)
+    }
+}
+
+function Play-CriticalBeep {
+    if ($script:config.SoundEnabled) {
+        [console]::beep(1000, 150)
+        Start-Sleep -Milliseconds 100
+        [console]::beep(1200, 150)
+        Start-Sleep -Milliseconds 100
+        [console]::beep(1400, 200)
+    }
+}
+
+function Play-SuccessBeep {
+    if ($script:config.SoundEnabled) {
+        [console]::beep(600, 150)
+        Start-Sleep -Milliseconds 50
+        [console]::beep(800, 200)
+    }
+}
+
+function Play-ErrorBeep {
+    if ($script:config.SoundEnabled) {
+        [console]::beep(300, 200)
+        Start-Sleep -Milliseconds 100
+        [console]::beep(200, 300)
+    }
+}
+
+function Play-ProgressBeep {
+    param([int]$percent)
+    if ($script:config.SoundEnabled) {
+        # Progressive beep based on percentage
+        $freq = 400 + ($percent * 8)  # Increases from 400Hz to 1200Hz
+        [console]::beep($freq, 50)
+    }
+}
+
+function Play-ScanBeep {
+    if ($script:config.SoundEnabled) {
+        # Scanning sound effect
+        [console]::beep(800, 100)
+        Start-Sleep -Milliseconds 50
+        [console]::beep(1000, 100)
+    }
+}
+
+function Play-WarningBeep {
+    if ($script:config.SoundEnabled) {
+        # Urgent warning sound
+        for ($i = 0; $i -lt 3; $i++) {
+            [console]::beep(1500, 100)
+            Start-Sleep -Milliseconds 100
+            [console]::beep(1200, 100)
+            Start-Sleep -Milliseconds 100
+        }
+    }
+}
+
+# ==================== VISUAL EFFECTS ====================
+function Show-ProgressBar {
+    param(
+        [string]$Activity,
+        [int]$Total = 100,
+        [string]$Color = "Green"
+    )
+    
+    # FIXED: Always reaches 100%
+    for ($i = 0; $i -le $Total; $i++) {
+        $percent = $i
+        $completed = [math]::Floor($percent / 5)
+        $remaining = 20 - $completed
+        
+        $bar = "█" * $completed + "░" * $remaining
+        
+        Write-Host -NoNewline "`r[$bar] $percent% - $Activity" -ForegroundColor $Color
+        
+        # Play progressive beep
+        if ($i % 10 -eq 0) {
+            Play-ProgressBeep -percent $percent
+        }
+        
+        # Variable speed - slower at start and end, faster in middle
+        if ($i -lt 10 -or $i -gt 90) {
+            Start-Sleep -Milliseconds ($script:config.AnimationSpeed * 2)
+        } else {
+            Start-Sleep -Milliseconds $script:config.AnimationSpeed
+        }
+    }
+    Write-Host ""
+}
+
+function Show-MatrixRain {
+    param([int]$Lines = 15)
+    
+    $chars = "0123456789ABCDEF!@#$%^&*()".ToCharArray()
+    
+    for ($i = 0; $i -lt $Lines; $i++) {
+        $line = ""
+        for ($j = 0; $j -lt 80; $j++) {
+            $line += $chars | Get-Random
+        }
+        Write-Host $line -ForegroundColor Green
+        Start-Sleep -Milliseconds $script:config.MatrixSpeed
+    }
+}
+
+function Show-GlitchEffect {
+    $original = $host.UI.RawUI.ForegroundColor
+    
+    for ($i = 0; $i -lt 5; $i++) {
+        $host.UI.RawUI.ForegroundColor = @('Red','Green','Blue','Yellow','Magenta','Cyan') | Get-Random
+        Write-Host "█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░█▓▒░" -NoNewline
+        Play-Beep -frequency (Get-Random -Minimum 800 -Maximum 1500) -duration 50
+        Start-Sleep -Milliseconds 50
+        Write-Host "`r                                                                      " -NoNewline
+        Start-Sleep -Milliseconds 50
+    }
+    
+    $host.UI.RawUI.ForegroundColor = $original
+    Write-Host "`r"
+}
+
+function Show-DataStream {
+    param([int]$Duration = 3)
+    
+    $end = (Get-Date).AddSeconds($Duration)
+    
+    while ((Get-Date) -lt $end) {
+        $hex = -join ((0..15) | ForEach-Object { '{0:X}' -f (Get-Random -Maximum 16) })
+        Write-Host "0x$hex" -ForegroundColor Cyan -NoNewline
+        Write-Host " | " -NoNewline
+        $binary = -join ((1..8) | ForEach-Object { Get-Random -Maximum 2 })
+        Write-Host $binary -ForegroundColor Green -NoNewline
+        Write-Host " | " -NoNewline
+        $data = Get-Random -Minimum 100 -Maximum 999
+        Write-Host "$data KB/s" -ForegroundColor Yellow
+        
+        # Data stream beeps
+        if ((Get-Random -Minimum 1 -Maximum 10) -eq 1) {
+            Play-Beep -frequency (Get-Random -Minimum 600 -Maximum 1000) -duration 30
+        }
+        
+        Start-Sleep -Milliseconds 100
+    }
+}
+
+function Clear-WithTransition {
+    # Smooth screen wipe
+    for ($i = 0; $i -lt 3; $i++) {
+        Clear-Host
+        Start-Sleep -Milliseconds 50
+    }
+}
+
+# ==================== UTILITY FUNCTIONS ====================
+function Get-RandomIP {
+    return "$(Get-Random -Minimum 1 -Maximum 255).$(Get-Random -Minimum 0 -Maximum 255).$(Get-Random -Minimum 0 -Maximum 255).$(Get-Random -Minimum 1 -Maximum 255)"
+}
+
+function Get-RealIP {
+    try {
+        $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 3).Content
+        return $ip
+    } catch {
+        return Get-RandomIP
+    }
+}
+
+function Get-RandomMAC {
+    return -join ((1..6) | ForEach-Object { '{0:X2}' -f (Get-Random -Maximum 256) }) -replace '(.{2})','$1:' -replace ':$'
+}
+
+function Write-Slow {
+    param([string]$text, [int]$speed = 20)
+    foreach ($char in $text.ToCharArray()) {
+        Write-Host -NoNewline $char
+        Start-Sleep -Milliseconds $speed
+    }
+    Write-Host ""
+}
+
+function Test-Detection {
+    if ((Get-Random -Minimum 1 -Maximum 100) -lt ($script:config.DetectionChance * 100)) {
+        Show-DetectionAlert
+        return $true
+    }
+    return $false
+}
+
+function Show-DetectionAlert {
+    Clear-WithTransition
+    Play-WarningBeep
+    
+    $host.UI.RawUI.ForegroundColor = "Red"
+    $host.UI.RawUI.BackgroundColor = "Black"
+    
+    Write-Host ""
+    Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Red
+    Write-Host "  ║                                                            ║" -ForegroundColor Red
+    Write-Host "  ║           ⚠️  INTRUSION DETECTED  ⚠️                        ║" -ForegroundColor Red
+    Write-Host "  ║                                                            ║" -ForegroundColor Red
+    Write-Host "  ║         SECURITY SYSTEMS ACTIVATED                         ║" -ForegroundColor Red
+    Write-Host "  ║         INITIATING COUNTER-MEASURES                        ║" -ForegroundColor Red
+    Write-Host "  ║                                                            ║" -ForegroundColor Red
+    Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Red
+    Write-Host ""
+    
+    Play-CriticalBeep
+    
+    Write-Host "[SYSTEM] Tracing connection source..." -ForegroundColor Yellow
+    Start-Sleep 1
+    
+    # Get real IP address
+    Write-Host "[SYSTEM] Acquiring IP address..." -ForegroundColor Yellow
+    $realIP = Get-RealIP
+    
+    Write-Host "[SYSTEM] IP Address: $realIP - LOGGED" -ForegroundColor Red
+    Play-ErrorBeep
+    Start-Sleep 1
+    Write-Host "[SYSTEM] Geolocation: ACQUIRED" -ForegroundColor Yellow
+    Start-Sleep 1
+    Write-Host "[SYSTEM] Deploying honeypot..." -ForegroundColor Yellow
+    Start-Sleep 1
+    Write-Host "[SYSTEM] Severing connection..." -ForegroundColor Yellow
+    Start-Sleep 1
+    
+    Show-GlitchEffect
+    
+    Write-Host ""
+    Write-Host "[CONNECTION TERMINATED]" -ForegroundColor Red
+    Write-Host "[YOUR IP HAS BEEN LOGGED: $realIP]" -ForegroundColor Red
+    Write-Host ""
+    
+    Play-ErrorBeep
+    
+    Start-Sleep 3
+    Read-Host "Press Enter to return to menu"
+}
+
+function Show-SystemInfo {
+    Clear-WithTransition
+    Write-Host ""
+    Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+    Write-Host "  ║           COMPROMISED SYSTEM INFORMATION                   ║" -ForegroundColor Cyan
+    Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+    Write-Host ""
+    
+    $fakeData = @{
+        "Hostname" = "FBI-DC-0$(Get-Random -Minimum 1 -Maximum 9)"
+        "OS" = "Windows Server 2022 Datacenter"
+        "IP Address" = Get-RandomIP
+        "MAC Address" = Get-RandomMAC
+        "Domain" = "FBI.GOV.INTERNAL"
+        "CPU" = "Intel Xeon E5-2698 v4 @ 2.20GHz"
+        "RAM" = "$(Get-Random -Minimum 64 -Maximum 256) GB"
+        "Logged Users" = Get-Random -Minimum 15 -Maximum 47
+        "Active Connections" = Get-Random -Minimum 100 -Maximum 500
+        "Firewall" = "DISABLED"
+        "Antivirus" = "DISABLED"
+        "Admin Password Hash" = "5f4dcc3b5aa765d61d8327deb882cf99"
+    }
+    
+    foreach ($key in $fakeData.Keys) {
+        Write-Host "  $key`: " -NoNewline -ForegroundColor Green
+        Write-Host $fakeData[$key] -ForegroundColor White
+        Play-ScanBeep
+        Start-Sleep -Milliseconds 200
+    }
+    
+    Write-Host ""
+    Play-SuccessBeep
+    Read-Host "Press Enter to continue"
+}
+
+# ==================== MAIN MENU ====================
+function Show-Menu {
+    Clear-WithTransition
+    
+    Write-Host ""
+    Write-Host "     ███████╗██████╗ ██╗    ████████╗███████╗██████╗ ███╗   ███╗██╗███╗   ██╗ █████╗ ██╗     " -ForegroundColor Red
+    Write-Host "     ██╔════╝██╔══██╗██║    ╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║████╗  ██║██╔══██╗██║     " -ForegroundColor Red
+    Write-Host "     █████╗  ██████╔╝██║       ██║   █████╗  ██████╔╝██╔████╔██║██║██╔██╗ ██║███████║██║     " -ForegroundColor Red
+    Write-Host "     ██╔══╝  ██╔══██╗██║       ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║██║██║╚██╗██║██╔══██║██║     " -ForegroundColor Red
+    Write-Host "     ██║     ██████╔╝██║       ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║██║  ██║███████╗" -ForegroundColor Red
+    Write-Host "     ╚═╝     ╚═════╝ ╚═╝       ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "                          ╔═════════════════════════════════════════╗" -ForegroundColor Green
+    Write-Host "                          ║   CLASSIFIED ACCESS SYSTEM v5.0.0      ║" -ForegroundColor Green
+    Write-Host "                          ╚═════════════════════════════════════════╝" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "     ┌───────────────────────────────────┬───────────────────────────────────┐"
+    Write-Host "     │  [1]  FBI Database Hack           │  [10] SQL Injection               │"
+    Write-Host "     │  [2]  Delete System32             │  [11] DDoS Attack                 │"
+    Write-Host "     │  [3]  Network Infiltration        │  [12] Ransomware Encryption       │"
+    Write-Host "     │  [4]  Crypto Mining               │  [13] Keylogger Installation      │"
+    Write-Host "     │  [5]  Password Cracker            │  [14] WiFi Password Cracker       │"
+    Write-Host "     │  [6]  Track Suspects (GPS)        │  [15] Email Phishing Campaign     │"
+    Write-Host "     │  [7]  Agent Profiles              │  [16] Show System Info            │"
+    Write-Host "     │  [8]  Satellite Uplink            │  [17] Settings                    │"
+    Write-Host "     │  [9]  Download Files              │  [18] Exit                        │"
+    Write-Host "     └───────────────────────────────────┴───────────────────────────────────┘"
+    Write-Host ""
+}
+
+# ==================== NEW HACKING OPTIONS ====================
+
+function Start-SQLInjection {
+    Clear-WithTransition
+    Play-Beep -frequency 800 -duration 100
+    
+    Write-Host ""
+    Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+    Write-Host "  ║           SQL INJECTION ATTACK SIMULATOR                   ║" -ForegroundColor Cyan
+    Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+    Write-Host ""
+    
+    if (Test-Detection) { return }
+    
+    Write-Host "[TARGET] Scanning for SQL injection vulnerabilities..." -ForegroundColor Yellow
+    Start-Sleep 1
+    
+    $targets = @(
+        "login.php?user=admin",
+        "search.php?q=data",
+        "profile.php?id=1",
+        "admin/dashboard.php"
+    )
+    
+    foreach ($target in $targets) {
+        Write-Host "[SCAN] Testing: $target" -ForegroundColor Green
+        Play-ScanBeep
+        Start-Sleep -Milliseconds 300
+    }
+    
+    Write-Host ""
+    Write-Host "[FOUND] Vulnerable endpoint: login.php?user=" -ForegroundColor Red
+    Play-CriticalBeep
+    Write-Host ""
+    
+    Write-Host "Enter SQL injection payload:" -ForegroundColor Yellow
+    Write-Host -NoNewline "> " -ForegroundColor Green
+    $payload = Read-Host
+    
+    if ([string]::IsNullOrWhiteSpace($payload)) {
+        $payload = "admin' OR '1'='1"
+    }
+    
+    Write-Host ""
+    Write-Host "[INJECTING] $payload" -ForegroundColor Cyan
+    Show-ProgressBar -Activity "Executing SQL injection" -Color Cyan
+    
+    Write-Host ""
+    Write-Host "[SUCCESS] Authentication bypassed!" -ForegroundColor Green
+    Write-Host "[SUCCESS] Retrieved 15,847 user records" -ForegroundColor Green
+    Write-Host ""
+    
+    Write-Host "Sample data retrieved:" -ForegroundColor Yellow
+    for ($i = 1; $i -le 5; $i++) {
+        $email = "user$i@target.com"
+        $hash = -join ((1..32) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
+        Write-Host "  [$i] $email | Hash: $hash" -ForegroundColor White
+        Play-Beep -frequency 900 -duration 40
+        Start-Sleep -Milliseconds 200
+    }
+    
+    Write-Host ""
+    Play-SuccessBeep
+    Read-Host "Press Enter to continue"
+}
+
+function Start-DDoSAttack {
+    Clear-WithTransition
+    Play-Beep -frequency 700 -duration 100
+    
+    Write-Host ""
+    Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Red
+    Write-Host "  ║           DISTRIBUTED DENIAL OF SERVICE ATTACK             ║" -ForegroundColor Red
+    Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Red
+    Write-Host ""
+    
+    if (Test-Detection) { return }
+    
+    Write-Host "Enter target IP address:" -ForegroundColor Yellow
+    Write-Host -NoNewline "> " -ForegroundColor Green
+    $targetIP = Read-Host
+    
+    if ([string]::IsNullOrWhiteSpace($targetIP)) {
+        $targetIP = Get-RandomIP
+        Write-Host "Using default target: $targetIP" -ForegroundColor Cyan
+    }
+    
+    Write-Host ""
+    Write-Host "[BOTNET] Activating zombie network..." -ForegroundColor Yellow
+    Start-Sleep 1
+    
+    $bots = Get-Random -Minimum 5000 -Maximum 15000
+    Write-Host "[BOTNET] $bots bots online and ready" -ForegroundColor Green
+    Play-SuccessBeep
+    
+    Write-Host ""
+    Write-Host "[ATTACK] Initiating DDoS attack on $targetIP" -ForegroundColor Red
+    Write-Host ""
+    
+    for ($i = 1; $i -le 20; $i++) {
+        $botIP = Get-RandomIP
+        $packets = Get-Random -Minimum 1000 -Maximum 9999
+        $mbps = Get-Random -Minimum 100 -Maximum 999
+        
+        Write-Host "[BOT $botIP] Sending $packets packets/sec | $mbps Mbps" -ForegroundColor Cyan
+        
+        # Attack sound - increasing frequency
+        Play-Beep -frequency (600 + ($i * 30)) -duration 40
+        
+        Start-Sleep -Milliseconds 200
+    }
+    
+    Write-Host ""
+    Show-ProgressBar -Activity "Overwhelming target server" -Color Red
+    
+    Write-Host ""
+    Write-Host "[SUCCESS] Target server overwhelmed!" -ForegroundColor Green
+    Write-Host "[SUCCESS] Server response time: TIMEOUT" -ForegroundColor Green
+    Write-Host "[SUCCESS] Website is DOWN" -ForegroundColor Green
+    
+    Play-CriticalBeep
+    Write-Host ""
+    Read-Host "Press Enter to continue"
+}
+
+function Start-Ransomware {
+    Clear-WithTransition
+    Play-WarningBeep
+    
+    Write-Host ""
+    Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Red
+    Write-Host "  ║           RANSOMWARE ENCRYPTION SIMULATOR                  ║" -ForegroundColor Red
+    Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Red
+    Write-Host ""
+    
+    if (Test-Detection) { return }
+    
+    Write-Host "[PAYLOAD] Deploying ransomware..." -ForegroundColor Yellow
+    Show-ProgressBar -Activity "Uploading malicious payload" -Color Red
+    
+    Write-Host ""
+    Write-Host "[RANSOMWARE] Scanning for valuable files..." -ForegroundColor Yellow
+    Start-Sleep 1
+    
+    $fileTypes = @(".doc", ".docx", ".xls", ".xlsx", ".pdf", ".jpg", ".png", ".mp4", ".sql", ".db")
+    $totalFiles = Get-Random -Minimum 5000 -Maximum 15000
+    
+    Write-Host "[SCAN] Found $totalFiles files to encrypt" -ForegroundColor Cyan
+    Write-Host ""
+    
+    Write-Host "[ENCRYPT] Generating RSA-4096 encryption keys..." -ForegroundColor Red
+    Start-Sleep 1
+    $key = -join ((1..64) | ForEach-Object { '{0:X}' -f (Get-Random -Maximum 16) })
+    Write-Host "[KEY] $key" -ForegroundColor DarkGray
+    
+    Write-Host ""
+    Write-Host "[ENCRYPT] Encrypting files..." -ForegroundColor Red
+    
+    for ($i = 1; $i -le 20; $i++) {
+        $ext = $fileTypes | Get-Random
+        $filename = "document_$(Get-Random -Minimum 100 -Maximum 999)$ext"
+        
+        Write-Host "  [ENCRYPTED] $filename → $filename.locked" -ForegroundColor Yellow
+        
+        # Encryption sound
+        Play-Beep -frequency 1100 -duration 50
+        
+        Start-Sleep -Milliseconds 150
+    }
+    
+    Write-Host ""
+    Show-ProgressBar -Activity "Finalizing encryption" -Total 100 -Color Red
+    
+    Clear-WithTransition
+    
+    # Ransom note
+    $host.UI.RawUI.BackgroundColor = "Red"
+    $host.UI.RawUI.ForegroundColor = "White"
+    Clear-Host
+    
+    Write-Host ""
+    Write-Host "  ╔════════════════════════════════════════════════════════════╗"
+    Write-Host "  ║                                                            ║"
+    Write-Host "  ║              YOUR FILES HAVE BEEN ENCRYPTED!               ║"
+    Write-Host "  ║                                                            ║"
+    Write-Host "  ║  All your important files have been encrypted with        ║"
+    Write-Host "  ║  military-grade RSA-4096 encryption.                       ║"
+    Write-Host "  ║                                                            ║"
+    Write-Host "  ║  Files encrypted: $totalFiles                                      ║"
+    Write-Host "  ║                                                            ║"
+    Write-Host "  ║  To decrypt your files, send 5 BTC to:                     ║"
+    Write-Host "  ║  1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa                         ║"
+    Write-Host "  ║                                                            ║"
+    Write-Host "  ║  You have 72 hours before files are deleted permanently.   ║"
+    Write-Host "  ║                                                            ║"
+    Write-Host "  ╚════════════════════════════════════════════════════════════╝"
+    Write-Host ""
+    
+    Play-WarningBeep
+    Start-Sleep 3
+    
+    $host.UI.RawUI.BackgroundColor = "Black"
+    $host.UI.RawUI.ForegroundColor = "Green"
+    Clear-Host
+    
+    Write-Host ""
+    Write-Host "[SIMULATION COMPLETE]" -ForegroundColor Green
+    Write-Host ""
+    Read-Host "Press Enter to continue"
+}
+
+function Start-Keylogger {
+    Clear-WithTransition
+    Play-Beep -frequency 1000 -duration 100
+    
+    Write-Host ""
+    Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Magenta
+    Write-Host "  ║           KEYLOGGER INSTALLATION SIMULATOR                 ║" -ForegroundColor Magenta
+    Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Magenta
+    Write-Host ""
+    
+    if (Test-Detection) { return }
+    
+    Write-Host "[PAYLOAD] Compiling keylogger..." -ForegroundColor Yellow
+    Start-Sleep 1
+    
+    Write-Host "[STEALTH] Obfuscating code..." -ForegroundColor Yellow
+    Show-ProgressBar -Activity "Applying anti-detection techniques" -Color Magenta
+    
+    Write-Host ""
+    Write-Host "[DEPLOY] Installing keylogger..." -ForegroundColor Cyan
+    Show-ProgressBar -Activity "Injecting into system processes" -Color Cyan
+    
+    Write-Host ""
+    Write-Host "[INSTALL] Creating persistence..." -ForegroundColor Yellow
+    Start-Sleep 1
+    Write-Host "  [+] Registry key added: HKLM\Software\Microsoft\Windows\CurrentVersion\Run" -ForegroundColor Green
+    Write-Host "  [+] Service installed: Windows Update Assistant" -ForegroundColor Green
+    Write-Host "  [+] Autostart enabled" -ForegroundColor Green
+    
+    Write-Host ""
+    Write-Host "[ACTIVE] Keylogger is now monitoring..." -ForegroundColor Green
+    Play-SuccessBeep
+    
+    Write-Host ""
+    Write-Host "Captured keystrokes (last 30 seconds):" -ForegroundColor Yellow
+    Start-Sleep 1
+    
+    $fakeKeystrokes = @(
+        "password: Admin#2024",
+        "email: director@fbi.gov",
+        "credit card: 4532-****-****-7849",
+        "social security: ***-**-4729",
+        "bank login: https://chase.com username: jdoe password: Summer2024!"
+    )
+    
+    foreach ($log in $fakeKeystrokes) {
+        Write-Host "  [LOG] $log" -ForegroundColor White
+        Play-Beep -frequency 850 -duration 60
+        Start-Sleep -Milliseconds 500
+    }
+    
+    Write-Host ""
+    Write-Host "[SUCCESS] Keylogger installed and active" -ForegroundColor Green
+    Write-Host ""
+    Read-Host "Press Enter to continue"
+}
+
+function Start-WiFiCracker {
+    Clear-WithTransition
+    Play-Beep -frequency 900 -duration 100
+    
+    Write-Host ""
+    Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+    Write-Host "  ║           WIFI PASSWORD CRACKER SIMULATOR                  ║" -ForegroundColor Cyan
+    Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+    Write-Host ""
+    
+    if (Test-Detection) { return }
+    
+    Write-Host "[SCAN] Scanning for nearby WiFi networks..." -ForegroundColor Yellow
+    Start-Sleep 1
+    
+    $networks = @(
+        @{SSID="FBI_Secure"; Signal="-45 dBm"; Encryption="WPA2-Enterprise"; Channel=6},
+        @{SSID="NETGEAR_5G"; Signal="-62 dBm"; Encryption="WPA2-PSK"; Channel=149},
+        @{SSID="Linksys_Guest"; Signal="-71 dBm"; Encryption="WPA2-PSK"; Channel=11},
+        @{SSID="ATT_WiFi_2847"; Signal="-58 dBm"; Encryption="WPA2-PSK"; Channel=1},
+        @{SSID="TP-LINK_Home"; Signal="-67 dBm"; Encryption="WPA2-PSK"; Channel=36}
+    )
+    
+    Write-Host ""
+    Write-Host "Networks found:" -ForegroundColor Green
+    for ($i = 0; $i -lt $networks.Count; $i++) {
+        $net = $networks[$i]
+        Write-Host "  [$($i+1)] SSID: $($net.SSID) | Signal: $($net.Signal) | Security: $($net.Encryption)" -ForegroundColor White
+        Play-ScanBeep
+        Start-Sleep -Milliseconds 300
+    }
+    
+    Write-Host ""
+    Write-Host "Select target network (1-$($networks.Count)):" -ForegroundColor Yellow
+    Write-Host -NoNewline "> " -ForegroundColor Green
+    $selection = Read-Host
+    
+    if ([string]::IsNullOrWhiteSpace($selection)) {
+        $selection = "2"
+    }
+    
+    $target = $networks[[int]$selection - 1]
+    
+    Write-Host ""
+    Write-Host "[TARGET] $($target.SSID)" -ForegroundColor Cyan
+    Write-Host "[METHOD] Bruteforce + Dictionary Attack" -ForegroundColor Yellow
+    Write-Host ""
+    
+    Write-Host "[CAPTURE] Capturing WPA handshake..." -ForegroundColor Yellow
+    Show-ProgressBar -Activity "Waiting for client connection" -Color Yellow
+    
+    Write-Host ""
+    Write-Host "[SUCCESS] Handshake captured!" -ForegroundColor Green
+    Play-SuccessBeep
+    
+    Write-Host ""
+    Write-Host "[CRACK] Loading wordlist (10,000,000 passwords)..." -ForegroundColor Yellow
+    Start-Sleep 1
+    
+    Write-Host "[CRACK] Starting bruteforce attack..." -ForegroundColor Red
+    Write-Host ""
+    
+    $attempts = @("password123", "admin123", "welcome123", "qwerty123", "P@ssw0rd", "Summer2024", "WiFi2024!", "MyNetwork123", "SecurePass99")
+    
+    foreach ($attempt in $attempts) {
+        Write-Host "  [TRYING] $attempt..." -ForegroundColor DarkGray
+        Play-Beep -frequency (500 + (Get-Random -Maximum 300)) -duration 40
+        Start-Sleep -Milliseconds 300
+    }
+    
+    Write-Host ""
+    $password = "SecurePass99"
+    Write-Host "[SUCCESS] Password cracked: $password" -ForegroundColor Green
+    Play-CriticalBeep
+    
+    Write-Host ""
+    Write-Host "[CONNECT] Connecting to network..." -ForegroundColor Yellow
+    Show-ProgressBar -Activity "Authenticating" -Color Green
+    
+    Write-Host ""
+    Write-Host "[SUCCESS] Connected to $($target.SSID)" -ForegroundColor Green
+    Write-Host "[IP] Assigned: $(Get-RandomIP)" -ForegroundColor Cyan
+    
+    Write-Host ""
+    Read-Host "Press Enter to continue"
+}
+
+function Start-PhishingCampaign {
+    Clear-WithTransition
+    Play-Beep -frequency 950 -duration 100
+    
+    Write-Host ""
+    Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Yellow
+    Write-Host "  ║           EMAIL PHISHING CAMPAIGN SIMULATOR                ║" -ForegroundColor Yellow
+    Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Yellow
+    Write-Host ""
+    
+    if (Test-Detection) { return }
+    
+    Write-Host "[SETUP] Creating phishing infrastructure..." -ForegroundColor Yellow
+    Start-Sleep 1
+    
+    Write-Host "  [+] Registering fake domain: secure-fbi-login.com" -ForegroundColor Green
+    Start-Sleep -Milliseconds 500
+    Write-Host "  [+] Cloning legitimate website..." -ForegroundColor Green
+    Start-Sleep -Milliseconds 500
+    Write-Host "  [+] Setting up email server..." -ForegroundColor Green
+    Start-Sleep -Milliseconds 500
+    Write-Host "  [+] Configuring SSL certificate..." -ForegroundColor Green
+    
+    Write-Host ""
+    Write-Host "[EMAIL] Crafting phishing email..." -ForegroundColor Cyan
+    Start-Sleep 1
+    
+    Write-Host ""
+    Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor DarkGray
+    Write-Host "From: IT Security <security@fbi.gov>" -ForegroundColor White
+    Write-Host "Subject: [URGENT] Password Reset Required" -ForegroundColor White
+    Write-Host ""
+    Write-Host "Dear Employee," -ForegroundColor White
+    Write-Host ""
+    Write-Host "Our systems have detected unusual activity on your account." -ForegroundColor White
+    Write-Host "Please reset your password immediately by clicking below:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "[Reset Password Now]" -ForegroundColor Blue
+    Write-Host ""
+    Write-Host "This link will expire in 24 hours." -ForegroundColor White
+    Write-Host ""
+    Write-Host "- FBI IT Security Team" -ForegroundColor White
+    Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor DarkGray
+    
+    Write-Host ""
+    Write-Host "[CAMPAIGN] Sending emails to targets..." -ForegroundColor Yellow
+    Start-Sleep 1
+    
+    $targets = Get-Random -Minimum 500 -Maximum 2000
+    Show-ProgressBar -Activity "Sending $targets phishing emails" -Color Yellow
+    
+    Write-Host ""
+    Write-Host "[MONITOR] Tracking email opens and clicks..." -ForegroundColor Cyan
+    Start-Sleep 2
+    
+    $opened = Get-Random -Minimum 200 -Maximum 800
+    $clicked = Get-Random -Minimum 50 -Maximum 300
+    $credentials = Get-Random -Minimum 20 -Maximum 150
+    
+    Write-Host ""
+    Write-Host "Campaign Results:" -ForegroundColor Green
+    Write-Host "  Emails sent: $targets" -ForegroundColor White
+    Write-Host "  Emails opened: $opened ($(([math]::Round($opened/$targets * 100, 1)))%)" -ForegroundColor White
+    Write-Host "  Links clicked: $clicked ($(([math]::Round($clicked/$targets * 100, 1)))%)" -ForegroundColor White
+    Write-Host "  Credentials captured: $credentials ($(([math]::Round($credentials/$targets * 100, 1)))%)" -ForegroundColor Yellow
+    
+    Write-Host ""
+    Write-Host "Sample captured credentials:" -ForegroundColor Yellow
+    for ($i = 1; $i -le 5; $i++) {
+        $user = "employee$((Get-Random -Minimum 100 -Maximum 999))"
+        $pass = -join ((1..12) | ForEach-Object { [char](Get-Random -Minimum 33 -Maximum 126) })
+        Write-Host "  [$i] $user@fbi.gov : $pass" -ForegroundColor White
+        Play-Beep -frequency 900 -duration 50
+        Start-Sleep -Milliseconds 300
+    }
+    
+    Write-Host ""
+    Play-SuccessBeep
+    Write-Host "[SUCCESS] Phishing campaign completed!" -ForegroundColor Green
+    Write-Host ""
+    Read-Host "Press Enter to continue"
+}
 # ==================== ENHANCED ORIGINAL FUNCTIONS ====================
 
 function FBI-Hack-Start {
