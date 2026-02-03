@@ -788,56 +788,97 @@ function FBI-Hack-Start {
     Write-Host "     │   FINGERPRINT SCANNER   │"
     Write-Host "     │                         │"
     Write-Host "     │       ╔═══════╗         │"
-    Write-Host "     │       ║ ░░░░░ ║         │" -ForegroundColor DarkGray
-    Write-Host "     │       ║ ░░░░░ ║         │" -ForegroundColor DarkGray
-    Write-Host "     │       ║ ░░░░░ ║         │" -ForegroundColor DarkGray
+    Write-Host "     │       ║       ║         │"
+    Write-Host "     │       ║       ║         │"
+    Write-Host "     │       ║       ║         │"
     Write-Host "     │       ╚═══════╝         │"
     Write-Host "     │                         │"
     Write-Host "     │   SCANNING...           │" -ForegroundColor Yellow
     Write-Host "     └─────────────────────────┘"
     
-    # Animated scanning - Fixed positioning
+    # Animated scanning - Simple approach without cursor manipulation
     for ($i = 0; $i -lt 3; $i++) {
-        Start-Sleep -Milliseconds 300
+        Start-Sleep -Milliseconds 400
         Play-Beep -frequency 1000 -duration 50
         
-        # Move cursor up 6 lines to overwrite the scanner display
-        for ($j = 0; $j -lt 6; $j++) {
-            Write-Host ""
-        }
-        
-        # Clear and redraw with scan pattern
-        $cursorPos = $host.UI.RawUI.CursorPosition
-        $cursorPos.Y -= 6
-        $host.UI.RawUI.CursorPosition = $cursorPos
-        
+        # Clear screen and redraw everything with scan pattern
+        Clear-Host
+        Write-Host ""
+        Write-Host "  ███████╗██████╗ ██╗    ██████╗  █████╗ ████████╗ █████╗ ██████╗  █████╗ ███████╗███████╗" -ForegroundColor Green
+        Write-Host "  ██╔════╝██╔══██╗██║    ██╔══██╗██╔══██╗╚══██╔══╝██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔════╝" -ForegroundColor Green
+        Write-Host "  █████╗  ██████╔╝██║    ██║  ██║███████║   ██║   ███████║██████╔╝███████║███████╗█████╗  " -ForegroundColor Green
+        Write-Host "  ██╔══╝  ██╔══██╗██║    ██║  ██║██╔══██║   ██║   ██╔══██║██╔══██╗██╔══██║╚════██║██╔══╝  " -ForegroundColor Green
+        Write-Host "  ██║     ██████╔╝██║    ██████╔╝██║  ██║   ██║   ██║  ██║██████╔╝██║  ██║███████║███████╗" -ForegroundColor Green
+        Write-Host "  ╚═╝     ╚═════╝ ╚═╝    ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "                        [CLASSIFIED - TOP SECRET - EYES ONLY]" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "[PHASE 1/6] Biometric Authentication Required"
+        Write-Host ""
+        Write-Host "Place finger on scanner..."
+        Write-Host ""
+        Write-Host "     ┌─────────────────────────┐"
+        Write-Host "     │   FINGERPRINT SCANNER   │"
+        Write-Host "     │                         │"
         Write-Host "     │       ╔═══════╗         │"
         Write-Host "     │       ║░█░█░█░║         │" -ForegroundColor Green
         Write-Host "     │       ║░░███░░║         │" -ForegroundColor Green
         Write-Host "     │       ║░█░█░█░║         │" -ForegroundColor Green
         Write-Host "     │       ╚═══════╝         │"
         Write-Host "     │                         │"
+        Write-Host "     │   SCANNING...           │" -ForegroundColor Yellow
+        Write-Host "     └─────────────────────────┘"
         
-        Start-Sleep -Milliseconds 300
+        Start-Sleep -Milliseconds 400
         
-        # Move back up again
-        $cursorPos = $host.UI.RawUI.CursorPosition
-        $cursorPos.Y -= 6
-        $host.UI.RawUI.CursorPosition = $cursorPos
-        
+        # Clear and show empty again
+        Clear-Host
+        Write-Host ""
+        Write-Host "  ███████╗██████╗ ██╗    ██████╗  █████╗ ████████╗ █████╗ ██████╗  █████╗ ███████╗███████╗" -ForegroundColor Green
+        Write-Host "  ██╔════╝██╔══██╗██║    ██╔══██╗██╔══██╗╚══██╔══╝██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔════╝" -ForegroundColor Green
+        Write-Host "  █████╗  ██████╔╝██║    ██║  ██║███████║   ██║   ███████║██████╔╝███████║███████╗█████╗  " -ForegroundColor Green
+        Write-Host "  ██╔══╝  ██╔══██╗██║    ██║  ██║██╔══██║   ██║   ██╔══██║██╔══██╗██╔══██║╚════██║██╔══╝  " -ForegroundColor Green
+        Write-Host "  ██║     ██████╔╝██║    ██████╔╝██║  ██║   ██║   ██║  ██║██████╔╝██║  ██║███████║███████╗" -ForegroundColor Green
+        Write-Host "  ╚═╝     ╚═════╝ ╚═╝    ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "                        [CLASSIFIED - TOP SECRET - EYES ONLY]" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "[PHASE 1/6] Biometric Authentication Required"
+        Write-Host ""
+        Write-Host "Place finger on scanner..."
+        Write-Host ""
+        Write-Host "     ┌─────────────────────────┐"
+        Write-Host "     │   FINGERPRINT SCANNER   │"
+        Write-Host "     │                         │"
         Write-Host "     │       ╔═══════╗         │"
-        Write-Host "     │       ║ ░░░░░ ║         │" -ForegroundColor DarkGray
-        Write-Host "     │       ║ ░░░░░ ║         │" -ForegroundColor DarkGray
-        Write-Host "     │       ║ ░░░░░ ║         │" -ForegroundColor DarkGray
+        Write-Host "     │       ║       ║         │"
+        Write-Host "     │       ║       ║         │"
+        Write-Host "     │       ║       ║         │"
         Write-Host "     │       ╚═══════╝         │"
         Write-Host "     │                         │"
+        Write-Host "     │   SCANNING...           │" -ForegroundColor Yellow
+        Write-Host "     └─────────────────────────┘"
     }
     
-    # Final scan result
-    $cursorPos = $host.UI.RawUI.CursorPosition
-    $cursorPos.Y -= 6
-    $host.UI.RawUI.CursorPosition = $cursorPos
-    
+    # Final scan result - redraw one last time with complete fingerprint
+    Clear-Host
+    Write-Host ""
+    Write-Host "  ███████╗██████╗ ██╗    ██████╗  █████╗ ████████╗ █████╗ ██████╗  █████╗ ███████╗███████╗" -ForegroundColor Green
+    Write-Host "  ██╔════╝██╔══██╗██║    ██╔══██╗██╔══██╗╚══██╔══╝██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔════╝" -ForegroundColor Green
+    Write-Host "  █████╗  ██████╔╝██║    ██║  ██║███████║   ██║   ███████║██████╔╝███████║███████╗█████╗  " -ForegroundColor Green
+    Write-Host "  ██╔══╝  ██╔══██╗██║    ██║  ██║██╔══██║   ██║   ██╔══██║██╔══██╗██╔══██║╚════██║██╔══╝  " -ForegroundColor Green
+    Write-Host "  ██║     ██████╔╝██║    ██████╔╝██║  ██║   ██║   ██║  ██║██████╔╝██║  ██║███████║███████╗" -ForegroundColor Green
+    Write-Host "  ╚═╝     ╚═════╝ ╚═╝    ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "                        [CLASSIFIED - TOP SECRET - EYES ONLY]" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "[PHASE 1/6] Biometric Authentication Required"
+    Write-Host ""
+    Write-Host "Place finger on scanner..."
+    Write-Host ""
+    Write-Host "     ┌─────────────────────────┐"
+    Write-Host "     │   FINGERPRINT SCANNER   │"
+    Write-Host "     │                         │"
     Write-Host "     │       ╔═══════╗         │"
     Write-Host "     │       ║░█████░║         │" -ForegroundColor Green
     Write-Host "     │       ║░░███░░║         │" -ForegroundColor Green
@@ -847,7 +888,7 @@ function FBI-Hack-Start {
     Write-Host "     │   SCAN COMPLETE         │" -ForegroundColor Green
     Write-Host "     └─────────────────────────┘"
     
-    Start-Sleep 1
+    Start-Sleep 2
     
     Clear-WithTransition
     Write-Host ""
