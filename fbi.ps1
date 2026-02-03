@@ -1882,141 +1882,122 @@ function Password-Crack {
     Read-Host "Press Enter to continue"
 }
 
-# ==================== SETTINGS (WITH SECRET OPTION) ====================
 function Show-Settings {
     Clear-WithTransition
-    
+
     Write-Host ""
     Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
     Write-Host "  ║                    SETTINGS & CONFIGURATION                ║" -ForegroundColor Cyan
     Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
     Write-Host ""
-    
+
     Write-Host "Current Settings:" -ForegroundColor Yellow
-    Write-Host "  [1] Animation Speed: $($script:config.AnimationSpeed)ms" -ForegroundColor White
-    Write-Host "  [2] Sound Effects: $($script:config.SoundEnabled)" -ForegroundColor White
-    Write-Host "  [3] Matrix Speed: $($script:config.MatrixSpeed)ms" -ForegroundColor White
-    
-    # Show secret option only if unlocked
+    Write-Host "  [1] Animation Speed: $($script:config.AnimationSpeed)ms"
+    Write-Host "  [2] Sound Effects: $($script:config.SoundEnabled)"
+    Write-Host "  [3] Matrix Speed: $($script:config.MatrixSpeed)ms"
+
     if ($script:config.SecretUnlocked) {
         Write-Host "  [5] 🔓 TURBO MODE: $($script:config.TurboMode)" -ForegroundColor Magenta
     }
-    
-    Write-Host "  [4] Return to Menu" -ForegroundColor White
+
+    Write-Host "  [4] Return to Menu"
     Write-Host ""
-    
-    # Show different prompt based on unlock status
-    if ($script:config.SecretUnlocked) {
-        $choice = Read-Host "Select setting to modify (1-5)"
-    } else {
-        $choice = Read-Host "Select setting to modify (1-4)"
-    }
-    
+
+    $choice = Read-Host "Select setting"
+
     switch ($choice) {
+
         "1" {
-            $speed = Read-Host "Enter animation speed in ms (10-200)"
-            $script:config.AnimationSpeed = [int]$speed
-            Write-Host "Animation speed updated!" -ForegroundColor Green
+            $script:config.AnimationSpeed = [int](Read-Host "Enter animation speed (10-200)")
             Play-SuccessBeep
-            Start-Sleep 1
             Show-Settings
         }
+
         "2" {
             $script:config.SoundEnabled = -not $script:config.SoundEnabled
-            Write-Host "Sound effects: $($script:config.SoundEnabled)" -ForegroundColor Green
             if ($script:config.SoundEnabled) { Play-SuccessBeep }
-            Start-Sleep 1
             Show-Settings
         }
+
         "3" {
-            $speed = Read-Host "Enter matrix speed in ms (10-100)"
-            $script:config.MatrixSpeed = [int]$speed
-            Write-Host "Matrix speed updated!" -ForegroundColor Green
+            $script:config.MatrixSpeed = [int](Read-Host "Enter matrix speed (10-100)")
             Play-SuccessBeep
-            Start-Sleep 1
             Show-Settings
         }
+
         "4" { return }
+
         "5" {
-            # SECRET OPTION - Unlocks if not already unlocked
             if (-not $script:config.SecretUnlocked) {
                 Clear-WithTransition
-                Write-Host ""
-                Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Magenta
-                Write-Host "  ║                                                            ║" -ForegroundColor Magenta
-                Write-Host "  ║              🔓 SECRET SETTING UNLOCKED! 🔓                ║" -ForegroundColor Magenta
-                Write-Host "  ║                                                            ║" -ForegroundColor Magenta
-                Write-Host "  ║           TURBO MODE has been discovered!                  ║" -ForegroundColor Magenta
-                Write-Host "  ║                                                            ║" -ForegroundColor Magenta
-                Write-Host "  ║        This will make everything 10x FASTER!               ║" -ForegroundColor Magenta
-                Write-Host "  ║                                                            ║" -ForegroundColor Magenta
-                Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Magenta
-                Write-Host ""
-                
-                # Play special unlock sound
-                for ($i = 0; $i -lt 3; $i++) {
-                    Play-Beep -frequency (600 + ($i * 200)) -duration 100
-                    Start-Sleep -Milliseconds 100
+                Write-Host "🔓 TURBO MODE UNLOCKED!" -ForegroundColor Magenta
+
+                1..3 | ForEach-Object {
+                    Play-Beep -frequency (600 + ($_ * 200)) -duration 100
                 }
-                
+
                 $script:config.SecretUnlocked = $true
                 $script:config.TurboMode = $false
-                
                 Start-Sleep 2
-                Write-Host "TURBO MODE is now available in settings!" -ForegroundColor Green
-                Start-Sleep 2
-                Show-Settings
-            } else {
-                # Toggle turbo mode
+            }
+            else {
                 $script:config.TurboMode = -not $script:config.TurboMode
-                
+
                 if ($script:config.TurboMode) {
-                    # TURBO MODE ON - Everything is 10x faster
                     $script:config.AnimationSpeed = 5
                     $script:config.MatrixSpeed = 3
-                    
-                    Clear-WithTransition
-                    Write-Host ""
-                    Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Red
-                    Write-Host "  ║                                                            ║" -ForegroundColor Red
-                    Write-Host "  ║              ⚡ TURBO MODE ACTIVATED! ⚡                     ║" -ForegroundColor Red
-                    Write-Host "  ║                                                            ║" -ForegroundColor Red
-                    Write-Host "  ║           Speed: 10x FASTER                                ║" -ForegroundColor Red
-                    Write-Host "  ║           Hold on to your seat!                            ║" -ForegroundColor Red
-                    Write-Host "  ║                                                            ║" -ForegroundColor Red
-                    Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Red
-                    Write-Host ""
-                    
-                    # Fast beeps
-                    for ($i = 0; $i -lt 5; $i++) {
-                        Play-Beep -frequency (1000 + ($i * 100)) -duration 50
-                        Start-Sleep -Milliseconds 50
-                    }
-                    
-                    Start-Sleep 1
-                } else {
-                    # TURBO MODE OFF - Back to normal
+                }
+                else {
                     $script:config.AnimationSpeed = 50
                     $script:config.MatrixSpeed = 30
-                    
-                    Clear-WithTransition
-                    Write-Host ""
-                    Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Yellow
-                    Write-Host "  ║                                                            ║" -ForegroundColor Yellow
-                    Write-Host "  ║              TURBO MODE DEACTIVATED                        ║" -ForegroundColor Yellow
-                    Write-Host "  ║                                                            ║" -ForegroundColor Yellow
-                    Write-Host "  ║           Speed: Back to normal                            ║" -ForegroundColor Yellow
-                    Write-Host "  ║                                                            ║" -ForegroundColor Yellow
-                    Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Yellow
-                    Write-Host ""
-                    
-                    Play-SuccessBeep
-                    Start-Sleep 1
                 }
-                
-                Show-Settings
+
+                Play-SuccessBeep
             }
+            Show-Settings
         }
+
+        # 🔥 HIDDEN OPTION — NOT SHOWN ANYWHERE
+        "6" {
+            if (-not $script:config.CaughtUnlocked) {
+                Clear-WithTransition
+                Write-Host ""
+                Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Red
+                Write-Host "  ║            ⚠️  DETECTION PROTOCOL FOUND  ⚠️                ║" -ForegroundColor Red
+                Write-Host "  ║                                                            ║" -ForegroundColor Red
+                Write-Host "  ║        THIS MODE FORCES A FAILURE STATE                    ║" -ForegroundColor Red
+                Write-Host "  ║                                                            ║" -ForegroundColor Red
+                Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Red
+                Write-Host ""
+
+                1..4 | ForEach-Object {
+                    Play-Beep -frequency 200 -duration 120
+                    Start-Sleep -Milliseconds 80
+                }
+
+                $script:config.CaughtUnlocked = $true
+                $script:config.CaughtMode = $false
+                Start-Sleep 2
+            }
+            else {
+                $script:config.CaughtMode = -not $script:config.CaughtMode
+
+                if ($script:config.CaughtMode) {
+                    $script:config.DetectionChance = 1.0
+                    Write-Host "🚨 CAUGHT MODE ENABLED — FAILURE GUARANTEED" -ForegroundColor Red
+                }
+                else {
+                    $script:config.DetectionChance = 0.15
+                    Write-Host "Caught Mode disabled." -ForegroundColor Yellow
+                }
+
+                Play-ErrorBeep
+                Start-Sleep 1
+            }
+
+            Show-Settings
+        }
+
         default {
             Write-Host "Invalid option!" -ForegroundColor Red
             Play-ErrorBeep
@@ -2025,6 +2006,7 @@ function Show-Settings {
         }
     }
 }
+
 # ==================== MAIN LOOP ====================
 $host.ui.RawUI.WindowTitle = "FBI TERMINAL"
 $host.ui.RawUI.BackgroundColor = "Black"
