@@ -1989,8 +1989,10 @@ function Show-Settings {
     }
 
     $input = Read-Host "Enter detection chance (0–100%)"
-    if ($input -match '^\d+$' -and [int]$input -le 100) {
-        $script:config.DetectionChance = ([int]$input) / 100
+    if ($input -match '^\d+$') {
+        $value = [math]::Min([math]::Max([int]$input, 0), 100)
+        $script:config.DetectionChance = $value / 100
+
         Write-Host "Detection chance set to $input%" -ForegroundColor Green
         Play-SuccessBeep
     }
