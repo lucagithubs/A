@@ -10,6 +10,9 @@ $script:config = @{
     DetectionChance = 0.15   # 15% chance of detection (hidden from settings)
     SecretUnlocked = $false  # Hidden turbo mode setting
     TurboMode = $false       # Turbo mode status
+    CaughtUnlocked = $false     # Hidden "Caught" mode
+    CaughtMode = $false         # Forces detection when enabled
+
 }
 
 # ==================== SOUND EFFECTS ====================
