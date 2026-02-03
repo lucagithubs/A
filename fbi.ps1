@@ -11,7 +11,7 @@ $script:config = @{
     SecretUnlocked = $false  # Hidden turbo mode setting
     TurboMode = $false       # Turbo mode status
     CaughtUnlocked = $false     # Hidden "Caught" mode
-    CaughtMode = $false         # Forces detection when enabled
+    
 
 }
 
@@ -1901,8 +1901,10 @@ function Show-Settings {
     }
 
     if ($script:config.CaughtUnlocked) {
-    Write-Host "  [6] 🚨 CAUGHT MODE: $($script:config.CaughtMode)" -ForegroundColor Red
+    $percent = [math]::Round($script:config.DetectionChance * 100)
+    Write-Host "  [6] 🚨 Detection Chance: $percent%" -ForegroundColor Red
     }
+
 
     Write-Host "  [4] Return to Menu"
     Write-Host ""
@@ -1962,7 +1964,7 @@ function Show-Settings {
         }
 
         # 🔥 HIDDEN OPTION — NOT SHOWN ANYWHERE
-        "6" {
+    "6" {
     if (-not $script:config.CaughtUnlocked) {
         Clear-WithTransition
         Write-Host ""
@@ -1970,7 +1972,7 @@ function Show-Settings {
         Write-Host "  ║                                                            ║" -ForegroundColor Red
         Write-Host "  ║           ⚠️  HIDDEN PROTOCOL DISCOVERED  ⚠️               ║" -ForegroundColor Red
         Write-Host "  ║                                                            ║" -ForegroundColor Red
-        Write-Host "  ║              CAUGHT MODE UNLOCKED                          ║" -ForegroundColor Red
+        Write-Host "  ║        DETECTION THRESHOLD CONTROL UNLOCKED                ║" -ForegroundColor Red
         Write-Host "  ║                                                            ║" -ForegroundColor Red
         Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Red
         Write-Host ""
@@ -1981,22 +1983,26 @@ function Show-Settings {
         }
 
         $script:config.CaughtUnlocked = $true
-        $script:config.CaughtMode = $false
-
         Start-Sleep 2
         Show-Settings
+        return
+    }
+
+    $input = Read-Host "Enter detection chance (0–100%)"
+    if ($input -match '^\d+$' -and [int]$input -le 100) {
+        $script:config.DetectionChance = ([int]$input) / 100
+        Write-Host "Detection chance set to $input%" -ForegroundColor Green
+        Play-SuccessBeep
     }
     else {
-        $script:config.CaughtMode = -not $script:config.CaughtMode
-
-        Write-Host ""
-        Write-Host "CAUGHT MODE: $($script:config.CaughtMode)" -ForegroundColor Red
+        Write-Host "Invalid percentage!" -ForegroundColor Red
         Play-ErrorBeep
-        Start-Sleep 1
-
-        Show-Settings
     }
+
+    Start-Sleep 1
+    Show-Settings
 }
+
 
 
         default {
