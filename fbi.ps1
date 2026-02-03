@@ -1900,6 +1900,10 @@ function Show-Settings {
         Write-Host "  [5] 🔓 TURBO MODE: $($script:config.TurboMode)" -ForegroundColor Magenta
     }
 
+    if ($script:config.CaughtUnlocked) {
+    Write-Host "  [6] 🚨 CAUGHT MODE: $($script:config.CaughtMode)" -ForegroundColor Red
+    }
+
     Write-Host "  [4] Return to Menu"
     Write-Host ""
 
@@ -1959,44 +1963,41 @@ function Show-Settings {
 
         # 🔥 HIDDEN OPTION — NOT SHOWN ANYWHERE
         "6" {
-            if (-not $script:config.CaughtUnlocked) {
-                Clear-WithTransition
-                Write-Host ""
-                Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Red
-                Write-Host "  ║            ⚠️  DETECTION PROTOCOL FOUND  ⚠️                ║" -ForegroundColor Red
-                Write-Host "  ║                                                            ║" -ForegroundColor Red
-                Write-Host "  ║        THIS MODE FORCES A FAILURE STATE                    ║" -ForegroundColor Red
-                Write-Host "  ║                                                            ║" -ForegroundColor Red
-                Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Red
-                Write-Host ""
+    if (-not $script:config.CaughtUnlocked) {
+        Clear-WithTransition
+        Write-Host ""
+        Write-Host "  ╔════════════════════════════════════════════════════════════╗" -ForegroundColor Red
+        Write-Host "  ║                                                            ║" -ForegroundColor Red
+        Write-Host "  ║           ⚠️  HIDDEN PROTOCOL DISCOVERED  ⚠️               ║" -ForegroundColor Red
+        Write-Host "  ║                                                            ║" -ForegroundColor Red
+        Write-Host "  ║              CAUGHT MODE UNLOCKED                          ║" -ForegroundColor Red
+        Write-Host "  ║                                                            ║" -ForegroundColor Red
+        Write-Host "  ╚════════════════════════════════════════════════════════════╝" -ForegroundColor Red
+        Write-Host ""
 
-                1..4 | ForEach-Object {
-                    Play-Beep -frequency 200 -duration 120
-                    Start-Sleep -Milliseconds 80
-                }
-
-                $script:config.CaughtUnlocked = $true
-                $script:config.CaughtMode = $false
-                Start-Sleep 2
-            }
-            else {
-                $script:config.CaughtMode = -not $script:config.CaughtMode
-
-                if ($script:config.CaughtMode) {
-                    $script:config.DetectionChance = 1.0
-                    Write-Host "🚨 CAUGHT MODE ENABLED — FAILURE GUARANTEED" -ForegroundColor Red
-                }
-                else {
-                    $script:config.DetectionChance = 0.15
-                    Write-Host "Caught Mode disabled." -ForegroundColor Yellow
-                }
-
-                Play-ErrorBeep
-                Start-Sleep 1
-            }
-
-            Show-Settings
+        1..3 | ForEach-Object {
+            Play-Beep -frequency 300 -duration 120
+            Start-Sleep -Milliseconds 80
         }
+
+        $script:config.CaughtUnlocked = $true
+        $script:config.CaughtMode = $false
+
+        Start-Sleep 2
+        Show-Settings
+    }
+    else {
+        $script:config.CaughtMode = -not $script:config.CaughtMode
+
+        Write-Host ""
+        Write-Host "CAUGHT MODE: $($script:config.CaughtMode)" -ForegroundColor Red
+        Play-ErrorBeep
+        Start-Sleep 1
+
+        Show-Settings
+    }
+}
+
 
         default {
             Write-Host "Invalid option!" -ForegroundColor Red
