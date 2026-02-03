@@ -788,26 +788,66 @@ function FBI-Hack-Start {
     Write-Host "     │   FINGERPRINT SCANNER   │"
     Write-Host "     │                         │"
     Write-Host "     │       ╔═══════╗         │"
-    Write-Host "     │      ║ ░░░░░░░║         │" -ForegroundColor DarkGray
-    
-    # Animated scanning
-    for ($i = 0; $i -lt 3; $i++) {
-        Write-Host "     │      ║░███░███░║         │" -ForegroundColor Green
-        Play-Beep -frequency 1000 -duration 50
-        Start-Sleep -Milliseconds 300
-        Write-Host "`r     │      ║ ░░░░░░░║         │" -ForegroundColor DarkGray -NoNewline
-        Start-Sleep -Milliseconds 300
-    }
-    
-    Write-Host ""
-    Write-Host "     │      ║░███░███░║         │" -ForegroundColor Green
-    Write-Host "     │      ║░░█████░░║         │" -ForegroundColor Green
-    Write-Host "     │      ║░██░█░██░║         │" -ForegroundColor Green
+    Write-Host "     │       ║ ░░░░░ ║         │" -ForegroundColor DarkGray
+    Write-Host "     │       ║ ░░░░░ ║         │" -ForegroundColor DarkGray
+    Write-Host "     │       ║ ░░░░░ ║         │" -ForegroundColor DarkGray
     Write-Host "     │       ╚═══════╝         │"
     Write-Host "     │                         │"
     Write-Host "     │   SCANNING...           │" -ForegroundColor Yellow
     Write-Host "     └─────────────────────────┘"
-    Start-Sleep 2
+    
+    # Animated scanning - Fixed positioning
+    for ($i = 0; $i -lt 3; $i++) {
+        Start-Sleep -Milliseconds 300
+        Play-Beep -frequency 1000 -duration 50
+        
+        # Move cursor up 6 lines to overwrite the scanner display
+        for ($j = 0; $j -lt 6; $j++) {
+            Write-Host ""
+        }
+        
+        # Clear and redraw with scan pattern
+        $cursorPos = $host.UI.RawUI.CursorPosition
+        $cursorPos.Y -= 6
+        $host.UI.RawUI.CursorPosition = $cursorPos
+        
+        Write-Host "     │       ╔═══════╗         │"
+        Write-Host "     │       ║░█░█░█░║         │" -ForegroundColor Green
+        Write-Host "     │       ║░░███░░║         │" -ForegroundColor Green
+        Write-Host "     │       ║░█░█░█░║         │" -ForegroundColor Green
+        Write-Host "     │       ╚═══════╝         │"
+        Write-Host "     │                         │"
+        
+        Start-Sleep -Milliseconds 300
+        
+        # Move back up again
+        $cursorPos = $host.UI.RawUI.CursorPosition
+        $cursorPos.Y -= 6
+        $host.UI.RawUI.CursorPosition = $cursorPos
+        
+        Write-Host "     │       ╔═══════╗         │"
+        Write-Host "     │       ║ ░░░░░ ║         │" -ForegroundColor DarkGray
+        Write-Host "     │       ║ ░░░░░ ║         │" -ForegroundColor DarkGray
+        Write-Host "     │       ║ ░░░░░ ║         │" -ForegroundColor DarkGray
+        Write-Host "     │       ╚═══════╝         │"
+        Write-Host "     │                         │"
+    }
+    
+    # Final scan result
+    $cursorPos = $host.UI.RawUI.CursorPosition
+    $cursorPos.Y -= 6
+    $host.UI.RawUI.CursorPosition = $cursorPos
+    
+    Write-Host "     │       ╔═══════╗         │"
+    Write-Host "     │       ║░█████░║         │" -ForegroundColor Green
+    Write-Host "     │       ║░░███░░║         │" -ForegroundColor Green
+    Write-Host "     │       ║░█░█░█░║         │" -ForegroundColor Green
+    Write-Host "     │       ╚═══════╝         │"
+    Write-Host "     │                         │"
+    Write-Host "     │   SCAN COMPLETE         │" -ForegroundColor Green
+    Write-Host "     └─────────────────────────┘"
+    
+    Start-Sleep 1
     
     Clear-WithTransition
     Write-Host ""
